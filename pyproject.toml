@@ -15,6 +15,9 @@ dependencies = [
     "python-dotenv>=1.2.2",
 ]
 
+[project.scripts]
+taiga-mcp = "taiga_mcp.server:main"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/taiga_mcp"]
 
