@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "taiga-mcp"
 version = "0.1.0"
@@ -10,6 +14,9 @@ dependencies = [
     "pydantic>=2.13.4",
     "python-dotenv>=1.2.2",
 ]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/taiga_mcp"]
 
 [dependency-groups]
 dev = [
