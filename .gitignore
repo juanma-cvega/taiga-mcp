@@ -1,3 +1,4 @@
+.idea
 # Secrets — never commit real credentials
 .env
 
