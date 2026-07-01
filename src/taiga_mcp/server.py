@@ -2,7 +2,7 @@ import asyncio
 import os
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
-from taiga_mcp.auth import fetch_token
+from taiga_mcp.auth import authenticate
 from taiga_mcp.client import TaigaClient
 
 load_dotenv()
@@ -22,8 +22,8 @@ async def init() -> None:
     base_url = os.environ["TAIGA_URL"]
     username = os.environ["TAIGA_USERNAME"]
     password = os.environ["TAIGA_PASSWORD"]
-    token = await fetch_token(base_url, username, password)
-    _client = TaigaClient(base_url, token)
+    token, user_id = await authenticate(base_url, username, password)
+    _client = TaigaClient(base_url, token, user_id)
 
 
 @mcp.tool()

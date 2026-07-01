@@ -9,15 +9,27 @@ TOKEN = "test-token"
 
 @respx.mock
 async def test_list_projects():
-    respx.get(f"{TAIGA_URL}/projects").mock(
+    route = respx.get(f"{TAIGA_URL}/projects").mock(
         return_value=httpx.Response(200, json=[
             {"id": 1, "name": "Booking Engine", "slug": "booking-engine", "description": "My project"}
         ])
     )
-    client = TaigaClient(TAIGA_URL, TOKEN)
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
     projects = await client.list_projects()
     assert len(projects) == 1
     assert projects[0].name == "Booking Engine"
+
+
+@respx.mock
+async def test_list_projects_scopes_to_authenticated_member():
+    # Without ?member the endpoint returns every public project on the
+    # platform (~180k). It MUST be scoped to the authenticated user.
+    route = respx.get(f"{TAIGA_URL}/projects").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    await client.list_projects()
+    assert route.calls.last.request.url.params["member"] == "42"
 
 
 @respx.mock
@@ -28,7 +40,7 @@ async def test_list_sprints():
              "estimated_start": "2026-06-01", "estimated_finish": "2026-06-14"}
         ])
     )
-    client = TaigaClient(TAIGA_URL, TOKEN)
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
     sprints = await client.list_sprints(project_id=1)
     assert sprints[0].name == "Sprint 1"
     assert sprints[0].closed is False
@@ -43,7 +55,7 @@ async def test_list_user_stories():
              "status_extra_info": {"name": "In progress"}}
         ])
     )
-    client = TaigaClient(TAIGA_URL, TOKEN)
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
     stories = await client.list_user_stories(project_id=1)
     assert stories[0].subject == "As a user I want to book a slot"
     assert stories[0].status == "In progress"
@@ -57,7 +69,64 @@ async def test_list_tasks():
              "user_story": 5, "status_extra_info": {"name": "Done"}}
         ])
     )
-    client = TaigaClient(TAIGA_URL, TOKEN)
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
     tasks = await client.list_tasks(project_id=1, user_story_id=5)
     assert tasks[0].subject == "Implement endpoint"
     assert tasks[0].status == "Done"
+
+
+@respx.mock
+async def test_list_follows_pagination_across_pages():
+    page1 = httpx.Response(
+        200,
+        json=[{"id": 1, "ref": 1, "subject": "T1", "project": 1}],
+        headers={"x-pagination-next": f"{TAIGA_URL}/tasks?project=1&page=2"},
+    )
+    page2 = httpx.Response(
+        200,
+        json=[{"id": 2, "ref": 2, "subject": "T2", "project": 1}],
+    )
+    route = respx.get(f"{TAIGA_URL}/tasks").mock(side_effect=[page1, page2])
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    tasks = await client.list_tasks(project_id=1)
+    assert [t.ref for t in tasks] == [1, 2]
+    assert route.call_count == 2
+
+
+@respx.mock
+async def test_pagination_next_scheme_normalized_to_base_url():
+    # Taiga behind a TLS-terminating proxy advertises the next page over
+    # http:// even though the API is served over https://. Following that
+    # literally 301-redirects and drops the auth header, so the client must
+    # rewrite the scheme to match the base URL.
+    page1 = httpx.Response(
+        200,
+        json=[{"id": 1, "ref": 1, "subject": "T1", "project": 1}],
+        headers={"x-pagination-next": "http://api.taiga.io/api/v1/tasks?page=2"},
+    )
+    page2 = httpx.Response(
+        200,
+        json=[{"id": 2, "ref": 2, "subject": "T2", "project": 1}],
+    )
+    https_route = respx.get(f"{TAIGA_URL}/tasks").mock(side_effect=[page1, page2])
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    tasks = await client.list_tasks(project_id=1)
+    assert [t.ref for t in tasks] == [1, 2]
+    assert https_route.call_count == 2
+
+
+@respx.mock
+async def test_pagination_stops_on_repeated_next_url():
+    # Defense in depth: if the API keeps advertising the same next page, the
+    # client must not loop forever.
+    looping = httpx.Response(
+        200,
+        json=[{"id": 1, "ref": 1, "subject": "T1", "project": 1}],
+        headers={"x-pagination-next": f"{TAIGA_URL}/tasks?page=2"},
+    )
+    route = respx.get(f"{TAIGA_URL}/tasks").mock(return_value=looping)
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    tasks = await client.list_tasks(project_id=1)
+    # First request + one follow to page=2, then page=2's next repeats and stops.
+    assert route.call_count == 2
+    assert len(tasks) == 2
