@@ -76,6 +76,30 @@ async def test_list_tasks():
 
 
 @respx.mock
+async def test_list_epics():
+    respx.get(f"{TAIGA_URL}/epics").mock(
+        return_value=httpx.Response(200, json=[
+            {"id": 30, "ref": 11, "subject": "Create sqs consumer library", "project": 1,
+             "status_extra_info": {"name": "New"}}
+        ])
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    epics = await client.list_epics(project_id=1)
+    assert epics[0].subject == "Create sqs consumer library"
+    assert epics[0].status == "New"
+
+
+@respx.mock
+async def test_list_epics_scopes_to_project():
+    route = respx.get(f"{TAIGA_URL}/epics").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    await client.list_epics(project_id=7)
+    assert route.calls.last.request.url.params["project"] == "7"
+
+
+@respx.mock
 async def test_list_follows_pagination_across_pages():
     page1 = httpx.Response(
         200,

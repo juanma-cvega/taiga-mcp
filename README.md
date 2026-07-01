@@ -1,0 +1,73 @@
+# taiga-mcp
+
+An [MCP](https://modelcontextprotocol.io) server that exposes read-only access
+to a [Taiga](https://taiga.io) account — projects, epics, user stories, tasks,
+and sprints — as tools an MCP client (e.g. Claude Code) can call.
+
+## Requirements
+
+- Python >= 3.10
+- [uv](https://docs.astral.sh/uv/)
+- A Taiga account (Taiga Cloud or self-hosted)
+
+## Setup
+
+Copy the example environment file and fill in your credentials:
+
+```bash
+cp .env.example .env
+```
+
+```dotenv
+TAIGA_URL=https://api.taiga.io/api/v1
+TAIGA_USERNAME=your_username
+TAIGA_PASSWORD=your_password
+```
+
+`TAIGA_URL` is the base API URL. For Taiga Cloud use
+`https://api.taiga.io/api/v1`; for a self-hosted instance point it at your
+server's `/api/v1`.
+
+## Running
+
+```bash
+uv run taiga-mcp
+```
+
+The server authenticates on startup (exchanging username/password for a token)
+and speaks MCP over stdio.
+
+### Registering with Claude Code
+
+```bash
+claude mcp add taiga -- uv run --directory /path/to/taiga-mcp taiga-mcp
+```
+
+## Tools
+
+| Tool | Arguments | Description |
+| --- | --- | --- |
+| `list_projects` | — | List all projects accessible to the authenticated user. |
+| `list_epics` | `project_id` | List epics for a project. |
+| `list_user_stories` | `project_id`, `sprint_id?`, `status?` (`open`/`closed`) | List user stories for a project, optionally filtered by sprint or status. |
+| `list_tasks` | `project_id`, `user_story_id?` | List tasks for a project, optionally scoped to a user story. |
+| `get_current_sprint` | `project_id` | Get the currently open sprint for a project. |
+
+All list tools follow Taiga's pagination automatically, and `list_projects` is
+scoped to the authenticated user (an unfiltered query would return every public
+project on the platform).
+
+## Development
+
+Run the test suite:
+
+```bash
+uv run pytest
+```
+
+There is also a manual smoke test that hits a real Taiga account using the
+credentials in `.env`:
+
+```bash
+uv run python scripts/smoke_test.py
+```

@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock
 from taiga_mcp import server
-from taiga_mcp.models import Project, Sprint, UserStory, Task
+from taiga_mcp.models import Project, Sprint, UserStory, Task, Epic
 
 
 @pytest.fixture(autouse=True)
@@ -11,6 +11,7 @@ def mock_client(monkeypatch):
     mock.list_user_stories.return_value = []
     mock.list_tasks.return_value = []
     mock.list_sprints.return_value = []
+    mock.list_epics.return_value = []
     monkeypatch.setattr(server, "_client", mock)
     return mock
 
@@ -54,3 +55,18 @@ async def test_get_current_sprint_formats_output(mock_client):
 async def test_get_current_sprint_no_open_sprint(mock_client):
     result = await server.get_current_sprint(project_id=1)
     assert "No open sprint" in result
+
+
+async def test_list_epics_formats_output(mock_client):
+    mock_client.list_epics.return_value = [
+        Epic(id=30, ref=11, subject="Create sqs consumer library", project=1,
+             status_extra_info={"name": "New"})
+    ]
+    result = await server.list_epics(project_id=1)
+    assert "Create sqs consumer library" in result
+    assert "New" in result
+
+
+async def test_list_epics_empty(mock_client):
+    result = await server.list_epics(project_id=1)
+    assert "No epics found" in result

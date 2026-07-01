@@ -81,6 +81,20 @@ async def list_tasks(project_id: int, user_story_id: int | None = None) -> str:
 
 
 @mcp.tool()
+async def list_epics(project_id: int) -> str:
+    """
+    List epics for a Taiga project.
+
+    Args:
+        project_id: Numeric Taiga project ID.
+    """
+    epics = await _get_client().list_epics(project_id=project_id)
+    if not epics:
+        return "No epics found."
+    return "\n".join(f"- #{e.ref} {e.subject} [{e.status}]" for e in epics)
+
+
+@mcp.tool()
 async def get_current_sprint(project_id: int) -> str:
     """
     Get the currently open sprint for a Taiga project.

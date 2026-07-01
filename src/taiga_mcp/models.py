@@ -46,3 +46,17 @@ class Task(BaseModel):
         if self.status_extra_info:
             return self.status_extra_info.get("name", "unknown")
         return "unknown"
+
+
+class Epic(BaseModel):
+    id: int
+    ref: int
+    subject: str
+    project: int
+    status_extra_info: dict | None = None
+
+    @property
+    def status(self) -> str:
+        if self.status_extra_info:
+            return self.status_extra_info.get("name", "unknown")
+        return "unknown"

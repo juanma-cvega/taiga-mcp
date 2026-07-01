@@ -1,7 +1,7 @@
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx
-from taiga_mcp.models import Project, Sprint, UserStory, Task
+from taiga_mcp.models import Project, Sprint, UserStory, Task, Epic
 
 
 class TaigaClient:
@@ -48,6 +48,10 @@ class TaigaClient:
             params["user_story"] = user_story_id
         data = await self._get("/tasks", params=params)
         return [Task(**item) for item in data]
+
+    async def list_epics(self, project_id: int) -> list[Epic]:
+        data = await self._get("/epics", params={"project": project_id})
+        return [Epic(**item) for item in data]
 
     async def _get(self, path: str, params: dict | None = None) -> list:
         results: list = []
