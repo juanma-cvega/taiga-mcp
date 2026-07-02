@@ -348,3 +348,25 @@ async def test_update_epic_clears_field_with_empty_string():
     assert body["blocked_note"] is None      # '' -> cleared
     assert "description" not in body          # None -> omitted
     assert "status" not in body               # not requested -> no status GET
+
+
+@respx.mock
+async def test_update_story_maps_sprint_and_sends_version():
+    respx.get(f"{TAIGA_URL}/userstories/2").mock(
+        return_value=httpx.Response(200, json={
+            "id": 2, "ref": 9, "subject": "Story A", "project": 10, "version": 6,
+            "status_extra_info": {"name": "New"},
+        })
+    )
+    route = respx.patch(f"{TAIGA_URL}/userstories/2").mock(
+        return_value=httpx.Response(200, json={
+            "id": 2, "ref": 9, "subject": "Story A", "project": 10,
+            "status_extra_info": {"name": "New"},
+        })
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    await client.update_story(2, sprint_id=99)
+    body = json.loads(route.calls.last.request.content)
+    assert body["version"] == 6
+    assert body["milestone"] == 99
+    assert "status" not in body

@@ -135,3 +135,14 @@ async def test_update_epic_returns_updated_status(mock_client):
     mock_client.update_epic.assert_called_once()
     assert "#5 Epic A" in result
     assert "Done" in result
+
+
+async def test_update_story_returns_updated_status(mock_client):
+    mock_client.update_story.return_value = UserStory(
+        id=2, ref=9, subject="Story A", project=10,
+        status_extra_info={"name": "In progress"},
+    )
+    result = await server.update_story(story_id=2, status="In progress")
+    mock_client.update_story.assert_called_once()
+    assert "#9 Story A" in result
+    assert "In progress" in result
