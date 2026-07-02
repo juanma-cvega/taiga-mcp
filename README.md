@@ -52,6 +52,12 @@ claude mcp add taiga -- uv run --directory /path/to/taiga-mcp taiga-mcp
 | `list_user_stories` | `project_id`, `sprint_id?`, `status?` (`open`/`closed`) | List user stories for a project, optionally filtered by sprint or status. |
 | `list_tasks` | `project_id`, `user_story_id?` | List tasks for a project, optionally scoped to a user story. |
 | `get_current_sprint` | `project_id` | Get the currently open sprint for a project. |
+| `create_epic` | `project_id`, `subject`, + optional `description`, `status`, `assigned_to`, `tags`, `is_blocked`, `blocked_note`, `color` | Create an epic. `status` is a status name. |
+| `create_story` | `project_id`, `subject`, + optional `description`, `status`, `sprint_id`, `epic_id`, `assigned_to`, `tags`, `is_blocked`, `blocked_note` | Create a story, optionally linked to an epic. |
+| `get_epic` | `epic_id` | Get a single epic by id with its full field set. |
+| `get_story` | `story_id` | Get a single story by id with its full field set. |
+| `update_epic` | `epic_id`, + any field to change | Update an epic. `None` leaves a field unchanged; `''` clears it. |
+| `update_story` | `story_id`, + any field to change | Update a story. `None` leaves a field unchanged; `''` clears it. |
 
 All list tools follow Taiga's pagination automatically, and `list_projects` is
 scoped to the authenticated user (an unfiltered query would return every public
