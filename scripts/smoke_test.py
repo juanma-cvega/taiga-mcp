@@ -4,9 +4,9 @@ Run with:  uv run python scripts/smoke_test.py
 
 The smoke test authenticates with its OWN credentials, separate from the MCP
 server's. The server uses TAIGA_URL / TAIGA_USERNAME / TAIGA_PASSWORD; the smoke
-test uses TAIGA_SMOKE_URL / TAIGA_SMOKE_USERNAME / TAIGA_SMOKE_PASSWORD (each
-falling back to the corresponding TAIGA_* value if unset). This lets you point
-the write lifecycle at a throwaway project on a different account.
+test uses TAIGA_SMOKE_URL / TAIGA_SMOKE_USERNAME / TAIGA_SMOKE_PASSWORD. These
+are required (there is no fallback to the server's TAIGA_* values), which lets
+you point the write lifecycle at a throwaway project on a different account.
 
 By default this is READ-ONLY: it lists projects and exercises the read tools
 against the first project without mutating anything.
@@ -103,8 +103,19 @@ async def write_lifecycle(pid: int) -> None:
 
 
 def _smoke_env(name: str) -> str:
-    """Read TAIGA_SMOKE_<NAME>, falling back to TAIGA_<NAME>."""
-    return os.environ.get(f"TAIGA_SMOKE_{name}") or os.environ[f"TAIGA_{name}"]
+    """Read a required TAIGA_SMOKE_<NAME> variable.
+
+    The smoke test runs only with its own credentials — there is no fallback
+    to the MCP server's TAIGA_* variables.
+    """
+    value = os.environ.get(f"TAIGA_SMOKE_{name}")
+    if not value:
+        raise SystemExit(
+            f"TAIGA_SMOKE_{name} is not set. The smoke test requires its own "
+            f"credentials (TAIGA_SMOKE_URL / TAIGA_SMOKE_USERNAME / "
+            f"TAIGA_SMOKE_PASSWORD), separate from the MCP server's TAIGA_*."
+        )
+    return value
 
 
 async def main() -> None:

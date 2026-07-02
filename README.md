@@ -77,7 +77,7 @@ you can point it at a throwaway project on a different account:
 
 - Server: `TAIGA_URL` / `TAIGA_USERNAME` / `TAIGA_PASSWORD`
 - Smoke test: `TAIGA_SMOKE_URL` / `TAIGA_SMOKE_USERNAME` / `TAIGA_SMOKE_PASSWORD`
-  (each falls back to the corresponding `TAIGA_*` value if unset)
+  (required — no fallback to the server's `TAIGA_*` values)
 
 By default it is **read-only** — it lists projects and exercises the read tools
 against the first project without mutating anything:
