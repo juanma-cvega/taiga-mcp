@@ -1,6 +1,7 @@
 .idea
 # Secrets — never commit real credentials
 .env
+.superpowers
 
 # Python
 __pycache__/
