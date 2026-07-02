@@ -1,12 +1,13 @@
 import pytest
 from unittest.mock import AsyncMock
 from taiga_mcp import server
+from taiga_mcp.client import TaigaClient
 from taiga_mcp.models import Project, Sprint, UserStory, Task, Epic
 
 
 @pytest.fixture(autouse=True)
 def mock_client(monkeypatch):
-    mock = AsyncMock()
+    mock = AsyncMock(spec=TaigaClient)
     mock.list_projects.return_value = []
     mock.list_user_stories.return_value = []
     mock.list_tasks.return_value = []
@@ -121,6 +122,16 @@ async def test_get_story_formats_tags_and_epics(mock_client):
     assert "urgent" in result
     assert "#5" in result
     assert "Epic A" in result
+
+
+async def test_get_story_formats_epics_defensively_on_missing_keys(mock_client):
+    mock_client.get_story.return_value = UserStory(
+        id=2, ref=9, subject="Story A", project=10,
+        epics=[{"ref": 5}],  # missing 'subject'
+        status_extra_info={"name": "In progress"},
+    )
+    result = await server.get_story(story_id=2)
+    assert "#5" in result
 
 
 async def test_create_epic_returns_created_ref(mock_client):

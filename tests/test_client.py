@@ -381,6 +381,48 @@ async def test_update_epic_raises_readable_error_on_http_failure():
 
 
 @respx.mock
+async def test_update_epic_raises_readable_error_on_missing_version():
+    respx.get(f"{TAIGA_URL}/epics/1").mock(
+        return_value=httpx.Response(200, json={
+            "id": 1, "ref": 5, "subject": "Epic A", "project": 10,
+        })
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    with pytest.raises(RuntimeError, match="epic 1"):
+        await client.update_epic(1, subject="New subject")
+
+
+@respx.mock
+async def test_update_story_raises_readable_error_on_missing_version():
+    respx.get(f"{TAIGA_URL}/userstories/2").mock(
+        return_value=httpx.Response(200, json={
+            "id": 2, "ref": 9, "subject": "Story A", "project": 10,
+        })
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    with pytest.raises(RuntimeError, match="story 2"):
+        await client.update_story(2, subject="New subject")
+
+
+@respx.mock
+async def test_create_story_epic_link_failure_includes_story_and_epic_context():
+    respx.post(f"{TAIGA_URL}/userstories").mock(
+        return_value=httpx.Response(201, json={
+            "id": 61, "ref": 21, "subject": "Linked story", "project": 10,
+        })
+    )
+    respx.post(f"{TAIGA_URL}/epics/5/related_userstories").mock(
+        return_value=httpx.Response(400, json={"_error_message": "epic not found"})
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    with pytest.raises(RuntimeError) as exc:
+        await client.create_story(project_id=10, subject="Linked story", epic_id=5)
+    assert "#21" in str(exc.value)
+    assert "61" in str(exc.value)
+    assert "5" in str(exc.value)
+
+
+@respx.mock
 async def test_update_story_maps_sprint_and_sends_version():
     respx.get(f"{TAIGA_URL}/userstories/2").mock(
         return_value=httpx.Response(200, json={

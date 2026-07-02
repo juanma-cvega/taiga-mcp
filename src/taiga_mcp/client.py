@@ -15,6 +15,18 @@ def _build_payload(fields: dict) -> dict:
     return payload
 
 
+def _require_field(current: dict, field: str, kind: str, item_id: int) -> object:
+    """Fetch a required field from a Taiga response, raising a readable
+    RuntimeError instead of a bare KeyError if the response shape doesn't
+    match expectations (e.g. an unexpected/partial payload)."""
+    try:
+        return current[field]
+    except KeyError:
+        raise RuntimeError(
+            f"Taiga response for {kind} {item_id} missing '{field}'"
+        ) from None
+
+
 def _raise_for_taiga_error(response: httpx.Response) -> None:
     """Raise a RuntimeError with the Taiga response body on HTTP failure.
 
@@ -147,10 +159,16 @@ class TaigaClient:
         }))
         story = UserStory(**await self._post("/userstories", payload))
         if epic_id is not None:
-            await self._post(
-                f"/epics/{epic_id}/related_userstories",
-                {"epic": epic_id, "user_story": story.id},
-            )
+            try:
+                await self._post(
+                    f"/epics/{epic_id}/related_userstories",
+                    {"epic": epic_id, "user_story": story.id},
+                )
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Story #{story.ref} (id {story.id}) created but linking "
+                    f"to epic {epic_id} failed: {exc}"
+                ) from exc
         return story
 
     async def update_epic(
@@ -166,10 +184,11 @@ class TaigaClient:
         color: str | None = None,
     ) -> Epic:
         current = await self._get_one(f"/epics/{epic_id}")
-        payload = {"version": current["version"]}
+        payload = {"version": _require_field(current, "version", "epic", epic_id)}
         if status is not None:
+            project_id = _require_field(current, "project", "epic", epic_id)
             payload["status"] = await self._resolve_status(
-                "/epic-statuses", current["project"], status
+                "/epic-statuses", project_id, status
             )
         payload.update(_build_payload({
             "subject": subject,
@@ -195,10 +214,11 @@ class TaigaClient:
         blocked_note: str | None = None,
     ) -> UserStory:
         current = await self._get_one(f"/userstories/{story_id}")
-        payload = {"version": current["version"]}
+        payload = {"version": _require_field(current, "version", "story", story_id)}
         if status is not None:
+            project_id = _require_field(current, "project", "story", story_id)
             payload["status"] = await self._resolve_status(
-                "/userstory-statuses", current["project"], status
+                "/userstory-statuses", project_id, status
             )
         payload.update(_build_payload({
             "subject": subject,

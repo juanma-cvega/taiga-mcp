@@ -37,7 +37,10 @@ def _format_detail(item) -> str:
     if epics:
         lines.append(
             "Epics: "
-            + ", ".join(f"#{e['ref']} {e['subject']}" for e in epics)
+            + ", ".join(
+                f"#{e.get('ref', '?')} {e.get('subject', 'unknown')}"
+                for e in epics
+            )
         )
     lines.append(f"Description:\n{item.description or '—'}")
     return "\n".join(lines)
