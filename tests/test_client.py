@@ -271,3 +271,35 @@ async def test_create_epic_omits_status_when_not_given():
     await client.create_epic(project_id=10, subject="X")
     body = json.loads(route.calls.last.request.content)
     assert "status" not in body
+
+
+@respx.mock
+async def test_create_story_maps_sprint_to_milestone():
+    route = respx.post(f"{TAIGA_URL}/userstories").mock(
+        return_value=httpx.Response(201, json={
+            "id": 60, "ref": 20, "subject": "New story", "project": 10,
+        })
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    await client.create_story(project_id=10, subject="New story", sprint_id=99)
+    body = json.loads(route.calls.last.request.content)
+    assert body["milestone"] == 99
+    assert "epic" not in body
+
+
+@respx.mock
+async def test_create_story_links_epic_when_epic_id_given():
+    respx.post(f"{TAIGA_URL}/userstories").mock(
+        return_value=httpx.Response(201, json={
+            "id": 61, "ref": 21, "subject": "Linked story", "project": 10,
+        })
+    )
+    link = respx.post(f"{TAIGA_URL}/epics/5/related_userstories").mock(
+        return_value=httpx.Response(201, json={"epic": 5, "user_story": 61})
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    story = await client.create_story(project_id=10, subject="Linked story", epic_id=5)
+    assert story.id == 61
+    assert link.called
+    link_body = json.loads(link.calls.last.request.content)
+    assert link_body == {"epic": 5, "user_story": 61}

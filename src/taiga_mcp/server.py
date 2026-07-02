@@ -163,6 +163,43 @@ async def create_epic(
 
 
 @mcp.tool()
+async def create_story(
+    project_id: int,
+    subject: str,
+    description: str | None = None,
+    status: str | None = None,
+    sprint_id: int | None = None,
+    epic_id: int | None = None,
+    assigned_to: int | None = None,
+    tags: list | None = None,
+    is_blocked: bool | None = None,
+    blocked_note: str | None = None,
+) -> str:
+    """
+    Create a Taiga user story.
+
+    Args:
+        project_id: Numeric Taiga project ID.
+        subject: Story title (required).
+        description: Optional body text.
+        status: Optional status NAME (resolved to the project's status id).
+        sprint_id: Optional sprint (milestone) id.
+        epic_id: Optional epic id to link the new story to.
+        assigned_to: Optional numeric user id.
+        tags: Optional list of tags.
+        is_blocked: Optional blocked flag.
+        blocked_note: Optional reason when blocked.
+    """
+    story = await _get_client().create_story(
+        project_id=project_id, subject=subject, description=description,
+        status=status, sprint_id=sprint_id, epic_id=epic_id,
+        assigned_to=assigned_to, tags=tags, is_blocked=is_blocked,
+        blocked_note=blocked_note,
+    )
+    return f"Created #{story.ref} {story.subject} (id: {story.id})"
+
+
+@mcp.tool()
 async def get_current_sprint(project_id: int) -> str:
     """
     Get the currently open sprint for a Taiga project.

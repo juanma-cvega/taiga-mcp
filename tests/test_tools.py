@@ -109,3 +109,18 @@ async def test_create_epic_returns_created_ref(mock_client):
     assert "#11" in result
     assert "New epic" in result
     assert "50" in result
+
+
+async def test_create_story_returns_created_ref(mock_client):
+    mock_client.create_story.return_value = UserStory(
+        id=60, ref=20, subject="New story", project=10,
+        status_extra_info={"name": "New"},
+    )
+    result = await server.create_story(project_id=10, subject="New story", epic_id=5)
+    mock_client.create_story.assert_called_once_with(
+        project_id=10, subject="New story", description=None, status=None,
+        sprint_id=None, epic_id=5, assigned_to=None, tags=None,
+        is_blocked=None, blocked_note=None,
+    )
+    assert "#20" in result
+    assert "New story" in result
