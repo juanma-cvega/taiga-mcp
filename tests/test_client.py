@@ -157,6 +157,17 @@ async def test_pagination_stops_on_repeated_next_url():
     assert len(tasks) == 2
 
 
+async def test_client_reuses_single_httpx_client_across_calls():
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    assert isinstance(client._client, httpx.AsyncClient)
+    await client.aclose()
+
+
+def test_client_applies_configured_timeout():
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42, timeout=5.0)
+    assert client._client.timeout == httpx.Timeout(5.0)
+
+
 def test_build_payload_omits_none_and_clears_empty_string():
     result = _build_payload({
         "a": None,        # omitted

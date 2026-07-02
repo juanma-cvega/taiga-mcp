@@ -2,7 +2,7 @@ import httpx
 
 
 async def authenticate(
-    base_url: str, username: str, password: str
+    base_url: str, username: str, password: str, timeout: float = 30.0
 ) -> tuple[str, int]:
     """Authenticate against Taiga, returning (auth_token, user_id).
 
@@ -10,7 +10,7 @@ async def authenticate(
     user — an unfiltered /projects returns every public project on the
     platform.
     """
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=timeout) as client:
         response = await client.post(
             f"{base_url}/auth",
             json={"type": "normal", "username": username, "password": password},

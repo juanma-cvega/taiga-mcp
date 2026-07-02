@@ -32,11 +32,17 @@ def _raise_for_taiga_error(response: httpx.Response) -> None:
 
 
 class TaigaClient:
-    def __init__(self, base_url: str, token: str, user_id: int) -> None:
+    def __init__(
+        self, base_url: str, token: str, user_id: int, timeout: float = 30.0
+    ) -> None:
         self._base_url = base_url
         self._scheme = urlsplit(base_url).scheme
         self._user_id = user_id
         self._headers = {"Authorization": f"Bearer {token}"}
+        self._client = httpx.AsyncClient(headers=self._headers, timeout=timeout)
+
+    async def aclose(self) -> None:
+        await self._client.aclose()
 
     async def list_projects(self) -> list[Project]:
         # Scope to the authenticated user; an unfiltered /projects returns
@@ -206,28 +212,19 @@ class TaigaClient:
         return UserStory(**await self._patch(f"/userstories/{story_id}", payload))
 
     async def _get_one(self, path: str) -> dict:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{self._base_url}{path}", headers=self._headers
-            )
-            _raise_for_taiga_error(response)
-            return response.json()
+        response = await self._client.get(f"{self._base_url}{path}")
+        _raise_for_taiga_error(response)
+        return response.json()
 
     async def _post(self, path: str, json: dict) -> dict:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{self._base_url}{path}", headers=self._headers, json=json
-            )
-            _raise_for_taiga_error(response)
-            return response.json()
+        response = await self._client.post(f"{self._base_url}{path}", json=json)
+        _raise_for_taiga_error(response)
+        return response.json()
 
     async def _patch(self, path: str, json: dict) -> dict:
-        async with httpx.AsyncClient() as client:
-            response = await client.patch(
-                f"{self._base_url}{path}", headers=self._headers, json=json
-            )
-            _raise_for_taiga_error(response)
-            return response.json()
+        response = await self._client.patch(f"{self._base_url}{path}", json=json)
+        _raise_for_taiga_error(response)
+        return response.json()
 
     async def _resolve_status(
         self, status_endpoint: str, project_id: int, name: str
@@ -243,24 +240,21 @@ class TaigaClient:
         results: list = []
         url: str | None = f"{self._base_url}{path}"
         seen: set[str] = set()
-        async with httpx.AsyncClient() as client:
-            while url and url not in seen:
-                seen.add(url)
-                response = await client.get(
-                    url, headers=self._headers, params=params
-                )
-                _raise_for_taiga_error(response)
-                results.extend(response.json())
-                # Taiga returns the full URL of the next page (query params
-                # included) in this header, absent on the final page. A
-                # TLS-terminating proxy can advertise it over http:// even
-                # when the API is https://; following that downgrade 301s and
-                # drops the auth header, so pin the scheme to the base URL's.
-                next_url = response.headers.get("x-pagination-next")
-                if next_url:
-                    parts = urlsplit(next_url)
-                    if parts.scheme != self._scheme:
-                        next_url = urlunsplit(parts._replace(scheme=self._scheme))
-                url = next_url
-                params = None
+        while url and url not in seen:
+            seen.add(url)
+            response = await self._client.get(url, params=params)
+            _raise_for_taiga_error(response)
+            results.extend(response.json())
+            # Taiga returns the full URL of the next page (query params
+            # included) in this header, absent on the final page. A
+            # TLS-terminating proxy can advertise it over http:// even
+            # when the API is https://; following that downgrade 301s and
+            # drops the auth header, so pin the scheme to the base URL's.
+            next_url = response.headers.get("x-pagination-next")
+            if next_url:
+                parts = urlsplit(next_url)
+                if parts.scheme != self._scheme:
+                    next_url = urlunsplit(parts._replace(scheme=self._scheme))
+            url = next_url
+            params = None
         return results
