@@ -232,3 +232,4 @@ async def test_get_epic_fetches_single_object():
     epic = await client.get_epic(1)
     assert epic.ref == 5
     assert epic.color == "#123456"
+    assert epic.status == "New"
