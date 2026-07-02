@@ -1,10 +1,15 @@
 """Manual smoke test against a real Taiga account.
 
 Run with:  uv run python scripts/smoke_test.py
-Reads credentials from .env (TAIGA_URL / TAIGA_USERNAME / TAIGA_PASSWORD).
+
+The smoke test authenticates with its OWN credentials, separate from the MCP
+server's. The server uses TAIGA_URL / TAIGA_USERNAME / TAIGA_PASSWORD; the smoke
+test uses TAIGA_SMOKE_URL / TAIGA_SMOKE_USERNAME / TAIGA_SMOKE_PASSWORD (each
+falling back to the corresponding TAIGA_* value if unset). This lets you point
+the write lifecycle at a throwaway project on a different account.
 
 By default this is READ-ONLY: it lists projects and exercises the read tools
-against your first project without mutating anything.
+against the first project without mutating anything.
 
 To exercise the full create/get/update lifecycle, point it at a dedicated
 throwaway project via TAIGA_SMOKE_PROJECT_SLUG (create the project once in
@@ -21,7 +26,9 @@ import asyncio
 import os
 from datetime import datetime, timezone
 
-from taiga_mcp import server
+from taiga_mcp import server  # importing loads .env via server's load_dotenv()
+from taiga_mcp.auth import authenticate
+from taiga_mcp.client import TaigaClient
 
 
 async def read_only_checks(pid: int) -> None:
@@ -95,10 +102,24 @@ async def write_lifecycle(pid: int) -> None:
     ))
 
 
-async def main() -> None:
-    await server.init()  # loads .env, fetches auth token, builds client
+def _smoke_env(name: str) -> str:
+    """Read TAIGA_SMOKE_<NAME>, falling back to TAIGA_<NAME>."""
+    return os.environ.get(f"TAIGA_SMOKE_{name}") or os.environ[f"TAIGA_{name}"]
 
-    print("== list_projects ==")
+
+async def main() -> None:
+    # The smoke test runs against its own account (TAIGA_SMOKE_* creds),
+    # separate from the MCP server (TAIGA_*). Build a client for it and install
+    # it as the module client so the server.* tools operate on this account.
+    url = _smoke_env("URL")
+    username = _smoke_env("USERNAME")
+    password = _smoke_env("PASSWORD")
+    timeout = float(os.environ.get("TAIGA_TIMEOUT", "30"))
+
+    token, user_id = await authenticate(url, username, password, timeout)
+    server._client = TaigaClient(url, token, user_id, timeout=timeout)
+
+    print(f"== list_projects (user: {username}) ==")
     print(await server.list_projects())
 
     projects = await server._get_client().list_projects()
@@ -112,8 +133,8 @@ async def main() -> None:
         if smoke is None:
             available = ", ".join(p.slug for p in projects)
             raise SystemExit(
-                f"TAIGA_SMOKE_PROJECT_SLUG='{slug}' not found among your "
-                f"projects. Available slugs: {available}"
+                f"TAIGA_SMOKE_PROJECT_SLUG='{slug}' not found among this "
+                f"account's projects. Available slugs: {available}"
             )
         print(f"\nUsing smoke project '{smoke.name}' (slug: {smoke.slug}, "
               f"id: {smoke.id}) — FULL lifecycle (writes enabled).")
