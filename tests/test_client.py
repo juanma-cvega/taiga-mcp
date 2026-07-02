@@ -1,7 +1,7 @@
 import pytest
 import respx
 import httpx
-from taiga_mcp.client import TaigaClient
+from taiga_mcp.client import TaigaClient, _build_payload
 
 TAIGA_URL = "https://api.taiga.io/api/v1"
 TOKEN = "test-token"
@@ -154,3 +154,50 @@ async def test_pagination_stops_on_repeated_next_url():
     # First request + one follow to page=2, then page=2's next repeats and stops.
     assert route.call_count == 2
     assert len(tasks) == 2
+
+
+def test_build_payload_omits_none_and_clears_empty_string():
+    result = _build_payload({
+        "a": None,        # omitted
+        "b": "",          # cleared -> None
+        "c": "value",     # kept
+        "d": 0,           # kept (not treated as empty)
+        "e": False,       # kept
+        "f": [],          # kept
+    })
+    assert result == {"b": None, "c": "value", "d": 0, "e": False, "f": []}
+
+
+@respx.mock
+async def test_resolve_status_returns_matching_id():
+    respx.get(f"{TAIGA_URL}/userstory-statuses").mock(
+        return_value=httpx.Response(200, json=[
+            {"id": 1, "name": "New"}, {"id": 2, "name": "In progress"},
+        ])
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    status_id = await client._resolve_status("/userstory-statuses", 10, "In progress")
+    assert status_id == 2
+
+
+@respx.mock
+async def test_resolve_status_unknown_name_raises_with_valid_names():
+    respx.get(f"{TAIGA_URL}/epic-statuses").mock(
+        return_value=httpx.Response(200, json=[
+            {"id": 1, "name": "New"}, {"id": 2, "name": "Done"},
+        ])
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    with pytest.raises(ValueError) as exc:
+        await client._resolve_status("/epic-statuses", 10, "Bogus")
+    assert "New" in str(exc.value) and "Done" in str(exc.value)
+
+
+@respx.mock
+async def test_post_returns_json_body():
+    respx.post(f"{TAIGA_URL}/epics").mock(
+        return_value=httpx.Response(201, json={"id": 99, "ref": 3})
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    data = await client._post("/epics", {"subject": "X"})
+    assert data == {"id": 99, "ref": 3}

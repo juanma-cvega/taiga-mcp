@@ -4,6 +4,17 @@ import httpx
 from taiga_mcp.models import Project, Sprint, UserStory, Task, Epic
 
 
+def _build_payload(fields: dict) -> dict:
+    """Build a write payload: drop None (leave unchanged), map '' to None
+    (clear the value), keep everything else as-is."""
+    payload: dict = {}
+    for key, value in fields.items():
+        if value is None:
+            continue
+        payload[key] = None if value == "" else value
+    return payload
+
+
 class TaigaClient:
     def __init__(self, base_url: str, token: str, user_id: int) -> None:
         self._base_url = base_url
@@ -52,6 +63,40 @@ class TaigaClient:
     async def list_epics(self, project_id: int) -> list[Epic]:
         data = await self._get("/epics", params={"project": project_id})
         return [Epic(**item) for item in data]
+
+    async def _get_one(self, path: str) -> dict:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{self._base_url}{path}", headers=self._headers
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def _post(self, path: str, json: dict) -> dict:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{self._base_url}{path}", headers=self._headers, json=json
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def _patch(self, path: str, json: dict) -> dict:
+        async with httpx.AsyncClient() as client:
+            response = await client.patch(
+                f"{self._base_url}{path}", headers=self._headers, json=json
+            )
+            response.raise_for_status()
+            return response.json()
+
+    async def _resolve_status(
+        self, status_endpoint: str, project_id: int, name: str
+    ) -> int:
+        statuses = await self._get(status_endpoint, params={"project": project_id})
+        for status in statuses:
+            if status["name"] == name:
+                return status["id"]
+        valid = ", ".join(s["name"] for s in statuses)
+        raise ValueError(f"Unknown status '{name}'. Valid statuses: {valid}")
 
     async def _get(self, path: str, params: dict | None = None) -> list:
         results: list = []
