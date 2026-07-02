@@ -124,3 +124,14 @@ async def test_create_story_returns_created_ref(mock_client):
     )
     assert "#20" in result
     assert "New story" in result
+
+
+async def test_update_epic_returns_updated_status(mock_client):
+    mock_client.update_epic.return_value = Epic(
+        id=1, ref=5, subject="Epic A", project=10,
+        status_extra_info={"name": "Done"},
+    )
+    result = await server.update_epic(epic_id=1, status="Done")
+    mock_client.update_epic.assert_called_once()
+    assert "#5 Epic A" in result
+    assert "Done" in result

@@ -131,6 +131,35 @@ class TaigaClient:
             )
         return story
 
+    async def update_epic(
+        self,
+        epic_id: int,
+        subject: str | None = None,
+        description: str | None = None,
+        status: str | None = None,
+        assigned_to: int | None = None,
+        tags: list | None = None,
+        is_blocked: bool | None = None,
+        blocked_note: str | None = None,
+        color: str | None = None,
+    ) -> Epic:
+        current = await self._get_one(f"/epics/{epic_id}")
+        payload = {"version": current["version"]}
+        if status is not None:
+            payload["status"] = await self._resolve_status(
+                "/epic-statuses", current["project"], status
+            )
+        payload.update(_build_payload({
+            "subject": subject,
+            "description": description,
+            "assigned_to": assigned_to,
+            "tags": tags,
+            "is_blocked": is_blocked,
+            "blocked_note": blocked_note,
+            "color": color,
+        }))
+        return Epic(**await self._patch(f"/epics/{epic_id}", payload))
+
     async def _get_one(self, path: str) -> dict:
         async with httpx.AsyncClient() as client:
             response = await client.get(

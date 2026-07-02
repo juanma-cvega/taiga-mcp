@@ -200,6 +200,41 @@ async def create_story(
 
 
 @mcp.tool()
+async def update_epic(
+    epic_id: int,
+    subject: str | None = None,
+    description: str | None = None,
+    status: str | None = None,
+    assigned_to: int | None = None,
+    tags: list | None = None,
+    is_blocked: bool | None = None,
+    blocked_note: str | None = None,
+    color: str | None = None,
+) -> str:
+    """
+    Update a Taiga epic. Any argument left as None is unchanged; pass '' to
+    clear a text field.
+
+    Args:
+        epic_id: Numeric Taiga epic ID.
+        subject: New title.
+        description: New body text ('' clears it).
+        status: New status NAME (resolved to the project's status id).
+        assigned_to: Numeric user id.
+        tags: List of tags.
+        is_blocked: Blocked flag.
+        blocked_note: Reason when blocked ('' clears it).
+        color: Hex color ('' clears it).
+    """
+    epic = await _get_client().update_epic(
+        epic_id, subject=subject, description=description, status=status,
+        assigned_to=assigned_to, tags=tags, is_blocked=is_blocked,
+        blocked_note=blocked_note, color=color,
+    )
+    return f"Updated #{epic.ref} {epic.subject} [{epic.status}]"
+
+
+@mcp.tool()
 async def get_current_sprint(project_id: int) -> str:
     """
     Get the currently open sprint for a Taiga project.

@@ -303,3 +303,48 @@ async def test_create_story_links_epic_when_epic_id_given():
     assert link.called
     link_body = json.loads(link.calls.last.request.content)
     assert link_body == {"epic": 5, "user_story": 61}
+
+
+@respx.mock
+async def test_update_epic_sends_version_and_resolves_status():
+    respx.get(f"{TAIGA_URL}/epics/1").mock(
+        return_value=httpx.Response(200, json={
+            "id": 1, "ref": 5, "subject": "Epic A", "project": 10, "version": 4,
+            "status_extra_info": {"name": "New"},
+        })
+    )
+    respx.get(f"{TAIGA_URL}/epic-statuses").mock(
+        return_value=httpx.Response(200, json=[{"id": 8, "name": "Done"}])
+    )
+    route = respx.patch(f"{TAIGA_URL}/epics/1").mock(
+        return_value=httpx.Response(200, json={
+            "id": 1, "ref": 5, "subject": "Epic A", "project": 10,
+            "status_extra_info": {"name": "Done"},
+        })
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    epic = await client.update_epic(1, status="Done")
+    body = json.loads(route.calls.last.request.content)
+    assert body["version"] == 4
+    assert body["status"] == 8
+    assert epic.status == "Done"
+
+
+@respx.mock
+async def test_update_epic_clears_field_with_empty_string():
+    respx.get(f"{TAIGA_URL}/epics/1").mock(
+        return_value=httpx.Response(200, json={
+            "id": 1, "ref": 5, "subject": "Epic A", "project": 10, "version": 4,
+        })
+    )
+    route = respx.patch(f"{TAIGA_URL}/epics/1").mock(
+        return_value=httpx.Response(200, json={
+            "id": 1, "ref": 5, "subject": "Epic A", "project": 10,
+        })
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    await client.update_epic(1, blocked_note="")
+    body = json.loads(route.calls.last.request.content)
+    assert body["blocked_note"] is None      # '' -> cleared
+    assert "description" not in body          # None -> omitted
+    assert "status" not in body               # not requested -> no status GET
