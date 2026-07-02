@@ -72,8 +72,21 @@ uv run pytest
 ```
 
 There is also a manual smoke test that hits a real Taiga account using the
-credentials in `.env`:
+credentials in `.env`. By default it is **read-only** — it lists projects and
+exercises the read tools against your first project without mutating anything:
 
 ```bash
 uv run python scripts/smoke_test.py
 ```
+
+To exercise the full create/get/update lifecycle without touching real work,
+create a dedicated throwaway project in Taiga and point the smoke test at it by
+slug (the tool cannot create projects itself). It then creates an epic and a
+linked story there, updates them, and reads them back:
+
+```bash
+TAIGA_SMOKE_PROJECT_SLUG=your-smoke-project uv run python scripts/smoke_test.py
+```
+
+The client has no delete operation, so each full run leaves a new (timestamped)
+epic and story behind in the smoke project.
