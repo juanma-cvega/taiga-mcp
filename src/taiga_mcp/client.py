@@ -70,6 +70,33 @@ class TaigaClient:
     async def get_story(self, story_id: int) -> UserStory:
         return UserStory(**await self._get_one(f"/userstories/{story_id}"))
 
+    async def create_epic(
+        self,
+        project_id: int,
+        subject: str,
+        description: str | None = None,
+        status: str | None = None,
+        assigned_to: int | None = None,
+        tags: list | None = None,
+        is_blocked: bool | None = None,
+        blocked_note: str | None = None,
+        color: str | None = None,
+    ) -> Epic:
+        payload = {"project": project_id, "subject": subject}
+        if status is not None:
+            payload["status"] = await self._resolve_status(
+                "/epic-statuses", project_id, status
+            )
+        payload.update(_build_payload({
+            "description": description,
+            "assigned_to": assigned_to,
+            "tags": tags,
+            "is_blocked": is_blocked,
+            "blocked_note": blocked_note,
+            "color": color,
+        }))
+        return Epic(**await self._post("/epics", payload))
+
     async def _get_one(self, path: str) -> dict:
         async with httpx.AsyncClient() as client:
             response = await client.get(

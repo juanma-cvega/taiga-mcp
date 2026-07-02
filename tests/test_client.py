@@ -1,3 +1,4 @@
+import json
 import pytest
 import respx
 import httpx
@@ -233,3 +234,40 @@ async def test_get_epic_fetches_single_object():
     assert epic.ref == 5
     assert epic.color == "#123456"
     assert epic.status == "New"
+
+
+@respx.mock
+async def test_create_epic_posts_required_and_optional_fields():
+    respx.get(f"{TAIGA_URL}/epic-statuses").mock(
+        return_value=httpx.Response(200, json=[{"id": 7, "name": "New"}])
+    )
+    route = respx.post(f"{TAIGA_URL}/epics").mock(
+        return_value=httpx.Response(201, json={
+            "id": 50, "ref": 11, "subject": "New epic", "project": 10,
+            "status_extra_info": {"name": "New"},
+        })
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    epic = await client.create_epic(
+        project_id=10, subject="New epic", description="d", status="New",
+    )
+    body = json.loads(route.calls.last.request.content)
+    assert body["project"] == 10
+    assert body["subject"] == "New epic"
+    assert body["description"] == "d"
+    assert body["status"] == 7          # name resolved to id
+    assert "color" not in body          # None omitted
+    assert epic.ref == 11
+
+
+@respx.mock
+async def test_create_epic_omits_status_when_not_given():
+    route = respx.post(f"{TAIGA_URL}/epics").mock(
+        return_value=httpx.Response(201, json={
+            "id": 51, "ref": 12, "subject": "X", "project": 10,
+        })
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    await client.create_epic(project_id=10, subject="X")
+    body = json.loads(route.calls.last.request.content)
+    assert "status" not in body

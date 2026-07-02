@@ -97,3 +97,15 @@ async def test_get_epic_formats_detail(mock_client):
     assert "#5 Epic A" in result
     assert "New" in result
     assert "epic details" in result
+
+
+async def test_create_epic_returns_created_ref(mock_client):
+    mock_client.create_epic.return_value = Epic(
+        id=50, ref=11, subject="New epic", project=10,
+        status_extra_info={"name": "New"},
+    )
+    result = await server.create_epic(project_id=10, subject="New epic")
+    mock_client.create_epic.assert_called_once()
+    assert "#11" in result
+    assert "New epic" in result
+    assert "50" in result
