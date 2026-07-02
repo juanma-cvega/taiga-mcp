@@ -70,3 +70,30 @@ async def test_list_epics_formats_output(mock_client):
 async def test_list_epics_empty(mock_client):
     result = await server.list_epics(project_id=1)
     assert "No epics found" in result
+
+
+async def test_get_story_formats_detail(mock_client):
+    mock_client.get_story.return_value = UserStory(
+        id=2, ref=9, subject="Story A", project=10,
+        milestone_name="Sprint 1", description="the details",
+        is_blocked=True, blocked_note="waiting", assigned_to=42,
+        status_extra_info={"name": "In progress"},
+    )
+    result = await server.get_story(story_id=2)
+    assert "#9 Story A" in result
+    assert "In progress" in result
+    assert "the details" in result
+    assert "Sprint 1" in result
+    assert "waiting" in result
+
+
+async def test_get_epic_formats_detail(mock_client):
+    mock_client.get_epic.return_value = Epic(
+        id=1, ref=5, subject="Epic A", project=10,
+        description="epic details", color="#123456",
+        status_extra_info={"name": "New"},
+    )
+    result = await server.get_epic(epic_id=1)
+    assert "#5 Epic A" in result
+    assert "New" in result
+    assert "epic details" in result

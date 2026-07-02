@@ -201,3 +201,34 @@ async def test_post_returns_json_body():
     client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
     data = await client._post("/epics", {"subject": "X"})
     assert data == {"id": 99, "ref": 3}
+
+
+@respx.mock
+async def test_get_story_fetches_single_object():
+    respx.get(f"{TAIGA_URL}/userstories/2").mock(
+        return_value=httpx.Response(200, json={
+            "id": 2, "ref": 9, "subject": "Story A", "project": 10,
+            "description": "details", "version": 4,
+            "status_extra_info": {"name": "In progress"},
+        })
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    story = await client.get_story(2)
+    assert story.ref == 9
+    assert story.description == "details"
+    assert story.status == "In progress"
+
+
+@respx.mock
+async def test_get_epic_fetches_single_object():
+    respx.get(f"{TAIGA_URL}/epics/1").mock(
+        return_value=httpx.Response(200, json={
+            "id": 1, "ref": 5, "subject": "Epic A", "project": 10,
+            "color": "#123456", "version": 2,
+            "status_extra_info": {"name": "New"},
+        })
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    epic = await client.get_epic(1)
+    assert epic.ref == 5
+    assert epic.color == "#123456"

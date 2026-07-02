@@ -64,6 +64,12 @@ class TaigaClient:
         data = await self._get("/epics", params={"project": project_id})
         return [Epic(**item) for item in data]
 
+    async def get_epic(self, epic_id: int) -> Epic:
+        return Epic(**await self._get_one(f"/epics/{epic_id}"))
+
+    async def get_story(self, story_id: int) -> UserStory:
+        return UserStory(**await self._get_one(f"/userstories/{story_id}"))
+
     async def _get_one(self, path: str) -> dict:
         async with httpx.AsyncClient() as client:
             response = await client.get(

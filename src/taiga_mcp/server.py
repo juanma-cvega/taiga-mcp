@@ -17,6 +17,20 @@ def _get_client() -> TaigaClient:
     return _client
 
 
+def _format_detail(item) -> str:
+    lines = [f"#{item.ref} {item.subject} [{item.status}]"]
+    if getattr(item, "milestone_name", None):
+        lines.append(f"Sprint: {item.milestone_name}")
+    if item.assigned_to is not None:
+        lines.append(f"Assigned to: {item.assigned_to}")
+    blocked = f"Blocked: {bool(item.is_blocked)}"
+    if item.blocked_note:
+        blocked += f" ({item.blocked_note})"
+    lines.append(blocked)
+    lines.append(f"Description:\n{item.description or '—'}")
+    return "\n".join(lines)
+
+
 async def init() -> None:
     global _client
     base_url = os.environ["TAIGA_URL"]
@@ -92,6 +106,26 @@ async def list_epics(project_id: int) -> str:
     if not epics:
         return "No epics found."
     return "\n".join(f"- #{e.ref} {e.subject} [{e.status}]" for e in epics)
+
+
+@mcp.tool()
+async def get_epic(epic_id: int) -> str:
+    """Get a single Taiga epic by its numeric id.
+
+    Args:
+        epic_id: Numeric Taiga epic ID.
+    """
+    return _format_detail(await _get_client().get_epic(epic_id))
+
+
+@mcp.tool()
+async def get_story(story_id: int) -> str:
+    """Get a single Taiga user story by its numeric id.
+
+    Args:
+        story_id: Numeric Taiga user story ID.
+    """
+    return _format_detail(await _get_client().get_story(story_id))
 
 
 @mcp.tool()
