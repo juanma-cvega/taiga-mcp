@@ -24,6 +24,12 @@ class UserStory(BaseModel):
     project: int
     milestone: int | None = None
     milestone_name: str | None = None
+    description: str | None = None
+    tags: list | None = None
+    is_blocked: bool | None = None
+    blocked_note: str | None = None
+    assigned_to: int | None = None
+    version: int | None = None
     status_extra_info: dict | None = None
 
     @property
@@ -53,6 +59,13 @@ class Epic(BaseModel):
     ref: int
     subject: str
     project: int
+    description: str | None = None
+    tags: list | None = None
+    is_blocked: bool | None = None
+    blocked_note: str | None = None
+    assigned_to: int | None = None
+    color: str | None = None
+    version: int | None = None
     status_extra_info: dict | None = None
 
     @property
