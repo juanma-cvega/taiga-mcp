@@ -351,6 +351,25 @@ async def test_update_epic_clears_field_with_empty_string():
 
 
 @respx.mock
+async def test_update_epic_raises_readable_error_on_http_failure():
+    respx.get(f"{TAIGA_URL}/epics/1").mock(
+        return_value=httpx.Response(200, json={
+            "id": 1, "ref": 5, "subject": "Epic A", "project": 10, "version": 4,
+        })
+    )
+    respx.patch(f"{TAIGA_URL}/epics/1").mock(
+        return_value=httpx.Response(
+            409, json={"_error_message": "version mismatch"}
+        )
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    with pytest.raises(RuntimeError) as exc:
+        await client.update_epic(1, subject="New subject")
+    assert "409" in str(exc.value)
+    assert "version mismatch" in str(exc.value)
+
+
+@respx.mock
 async def test_update_story_maps_sprint_and_sends_version():
     respx.get(f"{TAIGA_URL}/userstories/2").mock(
         return_value=httpx.Response(200, json={

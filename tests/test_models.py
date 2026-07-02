@@ -31,3 +31,11 @@ def test_models_ignore_unknown_fields():
     # Taiga returns many fields we don't model; parsing must not fail.
     e = Epic(id=1, ref=5, subject="X", project=10, some_unmodeled_field=123)
     assert e.subject == "X"
+
+
+def test_user_story_parses_epics_field():
+    s = UserStory(
+        id=2, ref=9, subject="Story A", project=10,
+        epics=[{"ref": 5, "subject": "Epic A"}],
+    )
+    assert s.epics == [{"ref": 5, "subject": "Epic A"}]

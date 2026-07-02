@@ -99,6 +99,30 @@ async def test_get_epic_formats_detail(mock_client):
     assert "epic details" in result
 
 
+async def test_get_epic_formats_tags(mock_client):
+    mock_client.get_epic.return_value = Epic(
+        id=1, ref=5, subject="Epic A", project=10,
+        tags=[["urgent", "#f00"], ["backend", None]],
+        status_extra_info={"name": "New"},
+    )
+    result = await server.get_epic(epic_id=1)
+    assert "urgent" in result
+    assert "backend" in result
+
+
+async def test_get_story_formats_tags_and_epics(mock_client):
+    mock_client.get_story.return_value = UserStory(
+        id=2, ref=9, subject="Story A", project=10,
+        tags=[["urgent", "#f00"]],
+        epics=[{"ref": 5, "subject": "Epic A"}],
+        status_extra_info={"name": "In progress"},
+    )
+    result = await server.get_story(story_id=2)
+    assert "urgent" in result
+    assert "#5" in result
+    assert "Epic A" in result
+
+
 async def test_create_epic_returns_created_ref(mock_client):
     mock_client.create_epic.return_value = Epic(
         id=50, ref=11, subject="New epic", project=10,

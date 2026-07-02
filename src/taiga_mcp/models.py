@@ -31,6 +31,7 @@ class UserStory(BaseModel):
     assigned_to: int | None = None
     version: int | None = None
     status_extra_info: dict | None = None
+    epics: list | None = None
 
     @property
     def status(self) -> str:

@@ -27,6 +27,18 @@ def _format_detail(item) -> str:
     if item.blocked_note:
         blocked += f" ({item.blocked_note})"
     lines.append(blocked)
+    if item.tags:
+        names = [
+            tag[0] if isinstance(tag, (list, tuple)) else tag
+            for tag in item.tags
+        ]
+        lines.append(f"Tags: {', '.join(names)}")
+    epics = getattr(item, "epics", None)
+    if epics:
+        lines.append(
+            "Epics: "
+            + ", ".join(f"#{e['ref']} {e['subject']}" for e in epics)
+        )
     lines.append(f"Description:\n{item.description or '—'}")
     return "\n".join(lines)
 

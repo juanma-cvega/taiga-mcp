@@ -15,6 +15,22 @@ def _build_payload(fields: dict) -> dict:
     return payload
 
 
+def _raise_for_taiga_error(response: httpx.Response) -> None:
+    """Raise a RuntimeError with the Taiga response body on HTTP failure.
+
+    httpx.HTTPStatusError alone doesn't surface the response body, so an
+    agent hitting a 400/404/409 gets no actionable detail (e.g. a
+    stale-version 409 or an invalid field). Include the status code and
+    body text so callers can recover.
+    """
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        raise RuntimeError(
+            f"Taiga API error {response.status_code}: {response.text}"
+        ) from exc
+
+
 class TaigaClient:
     def __init__(self, base_url: str, token: str, user_id: int) -> None:
         self._base_url = base_url
@@ -194,7 +210,7 @@ class TaigaClient:
             response = await client.get(
                 f"{self._base_url}{path}", headers=self._headers
             )
-            response.raise_for_status()
+            _raise_for_taiga_error(response)
             return response.json()
 
     async def _post(self, path: str, json: dict) -> dict:
@@ -202,7 +218,7 @@ class TaigaClient:
             response = await client.post(
                 f"{self._base_url}{path}", headers=self._headers, json=json
             )
-            response.raise_for_status()
+            _raise_for_taiga_error(response)
             return response.json()
 
     async def _patch(self, path: str, json: dict) -> dict:
@@ -210,7 +226,7 @@ class TaigaClient:
             response = await client.patch(
                 f"{self._base_url}{path}", headers=self._headers, json=json
             )
-            response.raise_for_status()
+            _raise_for_taiga_error(response)
             return response.json()
 
     async def _resolve_status(
@@ -233,7 +249,7 @@ class TaigaClient:
                 response = await client.get(
                     url, headers=self._headers, params=params
                 )
-                response.raise_for_status()
+                _raise_for_taiga_error(response)
                 results.extend(response.json())
                 # Taiga returns the full URL of the next page (query params
                 # included) in this header, absent on the final page. A
