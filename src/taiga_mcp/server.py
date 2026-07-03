@@ -149,6 +149,30 @@ async def get_story(story_id: int) -> str:
 
 
 @mcp.tool()
+async def get_epic_by_ref(project_id: int, ref: int) -> str:
+    """Get a single Taiga epic by its per-project #ref (the number shown in
+    the Taiga UI), not its internal id.
+
+    Args:
+        project_id: Numeric Taiga project ID.
+        ref: The epic's #ref within that project.
+    """
+    return _format_detail(await _get_client().get_epic_by_ref(project_id, ref))
+
+
+@mcp.tool()
+async def get_story_by_ref(project_id: int, ref: int) -> str:
+    """Get a single Taiga user story by its per-project #ref (the number shown
+    in the Taiga UI), not its internal id.
+
+    Args:
+        project_id: Numeric Taiga project ID.
+        ref: The story's #ref within that project.
+    """
+    return _format_detail(await _get_client().get_story_by_ref(project_id, ref))
+
+
+@mcp.tool()
 async def create_epic(
     project_id: int,
     subject: str,
@@ -285,6 +309,80 @@ async def update_story(
         story_id, subject=subject, description=description, status=status,
         sprint_id=sprint_id, assigned_to=assigned_to, tags=tags,
         is_blocked=is_blocked, blocked_note=blocked_note,
+    )
+    return f"Updated #{story.ref} {story.subject} [{story.status}]"
+
+
+@mcp.tool()
+async def update_epic_by_ref(
+    project_id: int,
+    ref: int,
+    subject: str | None = None,
+    description: str | None = None,
+    status: str | None = None,
+    assigned_to: int | None = None,
+    tags: list | None = None,
+    is_blocked: bool | None = None,
+    blocked_note: str | None = None,
+    color: str | None = None,
+) -> str:
+    """
+    Update a Taiga epic by its per-project #ref (the number shown in the UI).
+    Any argument left as None is unchanged; pass '' to clear a text field.
+
+    Args:
+        project_id: Numeric Taiga project ID.
+        ref: The epic's #ref within that project.
+        subject: New title.
+        description: New body text ('' clears it).
+        status: New status NAME (resolved to the project's status id).
+        assigned_to: Numeric user id.
+        tags: List of tags.
+        is_blocked: Blocked flag.
+        blocked_note: Reason when blocked ('' clears it).
+        color: Hex color ('' clears it).
+    """
+    epic = await _get_client().update_epic_by_ref(
+        project_id, ref, subject=subject, description=description,
+        status=status, assigned_to=assigned_to, tags=tags,
+        is_blocked=is_blocked, blocked_note=blocked_note, color=color,
+    )
+    return f"Updated #{epic.ref} {epic.subject} [{epic.status}]"
+
+
+@mcp.tool()
+async def update_story_by_ref(
+    project_id: int,
+    ref: int,
+    subject: str | None = None,
+    description: str | None = None,
+    status: str | None = None,
+    sprint_id: int | None = None,
+    assigned_to: int | None = None,
+    tags: list | None = None,
+    is_blocked: bool | None = None,
+    blocked_note: str | None = None,
+) -> str:
+    """
+    Update a Taiga user story by its per-project #ref (the number shown in the
+    UI). Any argument left as None is unchanged; pass '' to clear a text field.
+
+    Args:
+        project_id: Numeric Taiga project ID.
+        ref: The story's #ref within that project.
+        subject: New title.
+        description: New body text ('' clears it).
+        status: New status NAME (resolved to the project's status id).
+        sprint_id: Sprint (milestone) id.
+        assigned_to: Numeric user id.
+        tags: List of tags.
+        is_blocked: Blocked flag.
+        blocked_note: Reason when blocked ('' clears it).
+    """
+    story = await _get_client().update_story_by_ref(
+        project_id, ref, subject=subject, description=description,
+        status=status, sprint_id=sprint_id, assigned_to=assigned_to,
+        tags=tags, is_blocked=is_blocked, blocked_note=blocked_note,
     )
     return f"Updated #{story.ref} {story.subject} [{story.status}]"
 

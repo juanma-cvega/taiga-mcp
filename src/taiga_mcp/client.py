@@ -104,6 +104,18 @@ class TaigaClient:
     async def get_story(self, story_id: int) -> UserStory:
         return UserStory(**await self._get_one(f"/userstories/{story_id}"))
 
+    async def get_epic_by_ref(self, project_id: int, ref: int) -> Epic:
+        data = await self._get_one(
+            "/epics/by_ref", params={"project": project_id, "ref": ref}
+        )
+        return Epic(**data)
+
+    async def get_story_by_ref(self, project_id: int, ref: int) -> UserStory:
+        data = await self._get_one(
+            "/userstories/by_ref", params={"project": project_id, "ref": ref}
+        )
+        return UserStory(**data)
+
     async def create_epic(
         self,
         project_id: int,
@@ -231,8 +243,56 @@ class TaigaClient:
         }))
         return UserStory(**await self._patch(f"/userstories/{story_id}", payload))
 
-    async def _get_one(self, path: str) -> dict:
-        response = await self._client.get(f"{self._base_url}{path}")
+    async def update_epic_by_ref(
+        self,
+        project_id: int,
+        ref: int,
+        subject: str | None = None,
+        description: str | None = None,
+        status: str | None = None,
+        assigned_to: int | None = None,
+        tags: list | None = None,
+        is_blocked: bool | None = None,
+        blocked_note: str | None = None,
+        color: str | None = None,
+    ) -> Epic:
+        current = await self._get_one(
+            "/epics/by_ref", params={"project": project_id, "ref": ref}
+        )
+        epic_id = _require_field(current, "id", "epic", f"#{ref}")
+        return await self.update_epic(
+            epic_id, subject=subject, description=description, status=status,
+            assigned_to=assigned_to, tags=tags, is_blocked=is_blocked,
+            blocked_note=blocked_note, color=color,
+        )
+
+    async def update_story_by_ref(
+        self,
+        project_id: int,
+        ref: int,
+        subject: str | None = None,
+        description: str | None = None,
+        status: str | None = None,
+        sprint_id: int | None = None,
+        assigned_to: int | None = None,
+        tags: list | None = None,
+        is_blocked: bool | None = None,
+        blocked_note: str | None = None,
+    ) -> UserStory:
+        current = await self._get_one(
+            "/userstories/by_ref", params={"project": project_id, "ref": ref}
+        )
+        story_id = _require_field(current, "id", "story", f"#{ref}")
+        return await self.update_story(
+            story_id, subject=subject, description=description, status=status,
+            sprint_id=sprint_id, assigned_to=assigned_to, tags=tags,
+            is_blocked=is_blocked, blocked_note=blocked_note,
+        )
+
+    async def _get_one(self, path: str, params: dict | None = None) -> dict:
+        response = await self._client.get(
+            f"{self._base_url}{path}", params=params
+        )
         _raise_for_taiga_error(response)
         return response.json()
 

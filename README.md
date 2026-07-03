@@ -56,8 +56,17 @@ claude mcp add taiga -- uv run --directory /path/to/taiga-mcp taiga-mcp
 | `create_story` | `project_id`, `subject`, + optional `description`, `status`, `sprint_id`, `epic_id`, `assigned_to`, `tags`, `is_blocked`, `blocked_note` | Create a story, optionally linked to an epic. |
 | `get_epic` | `epic_id` | Get a single epic by id with its full field set. |
 | `get_story` | `story_id` | Get a single story by id with its full field set. |
+| `get_epic_by_ref` | `project_id`, `ref` | Get a single epic by its per-project `#ref` (the number shown in the Taiga UI). |
+| `get_story_by_ref` | `project_id`, `ref` | Get a single story by its per-project `#ref`. |
 | `update_epic` | `epic_id`, + any field to change | Update an epic. `None` leaves a field unchanged; `''` clears it. |
 | `update_story` | `story_id`, + any field to change | Update a story. `None` leaves a field unchanged; `''` clears it. |
+| `update_epic_by_ref` | `project_id`, `ref`, + any field to change | Update an epic by its per-project `#ref`. |
+| `update_story_by_ref` | `project_id`, `ref`, + any field to change | Update a story by its per-project `#ref`. |
+
+The list tools show both the `#ref` (the identifier a human sees in the Taiga
+UI) and the numeric `id`. The `id` tools (`get_epic`, `update_story`, …) take
+the numeric id; the `_by_ref` tools take `(project_id, ref)` since a `#ref` is
+only unique within its project.
 
 All list tools follow Taiga's pagination automatically, and `list_projects` is
 scoped to the authenticated user (an unfiltered query would return every public

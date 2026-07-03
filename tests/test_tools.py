@@ -112,6 +112,50 @@ async def test_get_story_formats_detail(mock_client):
     assert "waiting" in result
 
 
+async def test_get_story_by_ref_formats_detail(mock_client):
+    mock_client.get_story_by_ref.return_value = UserStory(
+        id=2, ref=9, subject="Story A", project=10,
+        status_extra_info={"name": "In progress"},
+    )
+    result = await server.get_story_by_ref(project_id=10, ref=9)
+    mock_client.get_story_by_ref.assert_called_once_with(10, 9)
+    assert "#9 Story A" in result
+    assert "In progress" in result
+
+
+async def test_get_epic_by_ref_formats_detail(mock_client):
+    mock_client.get_epic_by_ref.return_value = Epic(
+        id=1, ref=5, subject="Epic A", project=10,
+        status_extra_info={"name": "New"},
+    )
+    result = await server.get_epic_by_ref(project_id=10, ref=5)
+    mock_client.get_epic_by_ref.assert_called_once_with(10, 5)
+    assert "#5 Epic A" in result
+    assert "New" in result
+
+
+async def test_update_story_by_ref_returns_updated_status(mock_client):
+    mock_client.update_story_by_ref.return_value = UserStory(
+        id=2, ref=9, subject="Story A", project=10,
+        status_extra_info={"name": "In progress"},
+    )
+    result = await server.update_story_by_ref(project_id=10, ref=9, status="In progress")
+    mock_client.update_story_by_ref.assert_called_once()
+    assert "#9 Story A" in result
+    assert "In progress" in result
+
+
+async def test_update_epic_by_ref_returns_updated_status(mock_client):
+    mock_client.update_epic_by_ref.return_value = Epic(
+        id=1, ref=5, subject="Epic A", project=10,
+        status_extra_info={"name": "Done"},
+    )
+    result = await server.update_epic_by_ref(project_id=10, ref=5, status="Done")
+    mock_client.update_epic_by_ref.assert_called_once()
+    assert "#5 Epic A" in result
+    assert "Done" in result
+
+
 async def test_get_epic_formats_detail(mock_client):
     mock_client.get_epic.return_value = Epic(
         id=1, ref=5, subject="Epic A", project=10,

@@ -232,6 +232,92 @@ async def test_get_story_fetches_single_object():
 
 
 @respx.mock
+async def test_get_story_by_ref_fetches_via_by_ref_endpoint():
+    route = respx.get(f"{TAIGA_URL}/userstories/by_ref").mock(
+        return_value=httpx.Response(200, json={
+            "id": 2, "ref": 9, "subject": "Story A", "project": 10,
+            "status_extra_info": {"name": "In progress"},
+        })
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    story = await client.get_story_by_ref(project_id=10, ref=9)
+    assert story.id == 2
+    assert story.ref == 9
+    params = route.calls.last.request.url.params
+    assert params["project"] == "10" and params["ref"] == "9"
+
+
+@respx.mock
+async def test_get_epic_by_ref_fetches_via_by_ref_endpoint():
+    route = respx.get(f"{TAIGA_URL}/epics/by_ref").mock(
+        return_value=httpx.Response(200, json={
+            "id": 1, "ref": 5, "subject": "Epic A", "project": 10,
+            "status_extra_info": {"name": "New"},
+        })
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    epic = await client.get_epic_by_ref(project_id=10, ref=5)
+    assert epic.id == 1
+    assert epic.ref == 5
+    params = route.calls.last.request.url.params
+    assert params["project"] == "10" and params["ref"] == "5"
+
+
+@respx.mock
+async def test_update_story_by_ref_resolves_ref_then_patches():
+    # by_ref resolves the ref -> id; update_story then GETs by id for version
+    # and PATCHes.
+    respx.get(f"{TAIGA_URL}/userstories/by_ref").mock(
+        return_value=httpx.Response(200, json={
+            "id": 2, "ref": 9, "project": 10, "version": 6,
+            "status_extra_info": {"name": "New"},
+        })
+    )
+    respx.get(f"{TAIGA_URL}/userstories/2").mock(
+        return_value=httpx.Response(200, json={
+            "id": 2, "ref": 9, "project": 10, "version": 6,
+            "status_extra_info": {"name": "New"},
+        })
+    )
+    route = respx.patch(f"{TAIGA_URL}/userstories/2").mock(
+        return_value=httpx.Response(200, json={
+            "id": 2, "ref": 9, "subject": "Story A", "project": 10,
+            "status_extra_info": {"name": "New"},
+        })
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    await client.update_story_by_ref(project_id=10, ref=9, description="edited")
+    body = json.loads(route.calls.last.request.content)
+    assert body["version"] == 6
+    assert body["description"] == "edited"
+
+
+@respx.mock
+async def test_update_epic_by_ref_resolves_ref_then_patches():
+    respx.get(f"{TAIGA_URL}/epics/by_ref").mock(
+        return_value=httpx.Response(200, json={
+            "id": 1, "ref": 5, "project": 10, "version": 3,
+        })
+    )
+    respx.get(f"{TAIGA_URL}/epics/1").mock(
+        return_value=httpx.Response(200, json={
+            "id": 1, "ref": 5, "project": 10, "version": 3,
+        })
+    )
+    route = respx.patch(f"{TAIGA_URL}/epics/1").mock(
+        return_value=httpx.Response(200, json={
+            "id": 1, "ref": 5, "subject": "Epic A", "project": 10,
+            "status_extra_info": {"name": "New"},
+        })
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    await client.update_epic_by_ref(project_id=10, ref=5, description="edited")
+    body = json.loads(route.calls.last.request.content)
+    assert body["version"] == 3
+    assert body["description"] == "edited"
+
+
+@respx.mock
 async def test_get_epic_fetches_single_object():
     respx.get(f"{TAIGA_URL}/epics/1").mock(
         return_value=httpx.Response(200, json={
