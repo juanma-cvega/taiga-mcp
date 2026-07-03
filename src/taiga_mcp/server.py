@@ -87,7 +87,7 @@ async def list_user_stories(
     if not stories:
         return "No user stories found."
     return "\n".join(
-        f"- #{s.ref} {s.subject} [{s.status}]"
+        f"- #{s.ref} {s.subject} (id: {s.id}) [{s.status}]"
         + (f" (sprint: {s.milestone_name})" if s.milestone_name else "")
         for s in stories
     )
@@ -107,7 +107,9 @@ async def list_tasks(project_id: int, user_story_id: int | None = None) -> str:
     )
     if not tasks:
         return "No tasks found."
-    return "\n".join(f"- #{t.ref} {t.subject} [{t.status}]" for t in tasks)
+    return "\n".join(
+        f"- #{t.ref} {t.subject} (id: {t.id}) [{t.status}]" for t in tasks
+    )
 
 
 @mcp.tool()
@@ -121,7 +123,9 @@ async def list_epics(project_id: int) -> str:
     epics = await _get_client().list_epics(project_id=project_id)
     if not epics:
         return "No epics found."
-    return "\n".join(f"- #{e.ref} {e.subject} [{e.status}]" for e in epics)
+    return "\n".join(
+        f"- #{e.ref} {e.subject} (id: {e.id}) [{e.status}]" for e in epics
+    )
 
 
 @mcp.tool()

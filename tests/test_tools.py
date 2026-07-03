@@ -66,11 +66,35 @@ async def test_list_epics_formats_output(mock_client):
     result = await server.list_epics(project_id=1)
     assert "Create sqs consumer library" in result
     assert "New" in result
+    # The id must be surfaced so callers can feed it to get_epic/update_epic
+    # (which are keyed by id, not the #ref shown to humans).
+    assert "id: 30" in result
 
 
 async def test_list_epics_empty(mock_client):
     result = await server.list_epics(project_id=1)
     assert "No epics found" in result
+
+
+async def test_list_user_stories_formats_output_with_id(mock_client):
+    mock_client.list_user_stories.return_value = [
+        UserStory(id=5, ref=3, subject="Book a slot", project=1,
+                  status_extra_info={"name": "In progress"})
+    ]
+    result = await server.list_user_stories(project_id=1)
+    assert "Book a slot" in result
+    # id enables the list -> get_story/update_story flow (keyed by id, not #ref).
+    assert "id: 5" in result
+
+
+async def test_list_tasks_formats_output_with_id(mock_client):
+    mock_client.list_tasks.return_value = [
+        Task(id=20, ref=7, subject="Implement endpoint", project=1,
+             status_extra_info={"name": "Done"})
+    ]
+    result = await server.list_tasks(project_id=1)
+    assert "Implement endpoint" in result
+    assert "id: 20" in result
 
 
 async def test_get_story_formats_detail(mock_client):
