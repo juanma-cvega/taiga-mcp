@@ -52,8 +52,15 @@ async def init() -> None:
     username = os.environ["TAIGA_USERNAME"]
     password = os.environ["TAIGA_PASSWORD"]
     timeout = float(os.environ.get("TAIGA_TIMEOUT", "30"))
+
+    async def refresh_token() -> str:
+        token, _ = await authenticate(base_url, username, password, timeout=timeout)
+        return token
+
     token, user_id = await authenticate(base_url, username, password, timeout=timeout)
-    _client = TaigaClient(base_url, token, user_id, timeout=timeout)
+    _client = TaigaClient(
+        base_url, token, user_id, timeout=timeout, refresh_token=refresh_token
+    )
 
 
 @mcp.tool()

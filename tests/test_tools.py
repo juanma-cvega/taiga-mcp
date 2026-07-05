@@ -1,8 +1,12 @@
 import pytest
+import respx
+import httpx
 from unittest.mock import AsyncMock
 from taiga_mcp import server
 from taiga_mcp.client import TaigaClient
 from taiga_mcp.models import Project, Sprint, UserStory, Task, Epic
+
+TAIGA_URL = "https://api.taiga.io/api/v1"
 
 
 @pytest.fixture(autouse=True)
@@ -249,3 +253,21 @@ async def test_update_story_returns_updated_status(mock_client):
     mock_client.update_story.assert_called_once()
     assert "#9 Story A" in result
     assert "In progress" in result
+
+
+@respx.mock
+async def test_init_wires_a_working_refresh_callback(monkeypatch):
+    monkeypatch.setenv("TAIGA_URL", TAIGA_URL)
+    monkeypatch.setenv("TAIGA_USERNAME", "user")
+    monkeypatch.setenv("TAIGA_PASSWORD", "pass")
+    route = respx.post(f"{TAIGA_URL}/auth").mock(
+        side_effect=[
+            httpx.Response(200, json={"auth_token": "first-token", "id": 42}),
+            httpx.Response(200, json={"auth_token": "refreshed-token", "id": 42}),
+        ]
+    )
+    await server.init()
+    assert isinstance(server._client, TaigaClient)
+    new_token = await server._client._refresh_token()
+    assert new_token == "refreshed-token"
+    assert route.call_count == 2

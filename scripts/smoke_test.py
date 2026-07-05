@@ -31,6 +31,22 @@ from taiga_mcp.auth import authenticate
 from taiga_mcp.client import TaigaClient
 
 
+async def refresh_check() -> None:
+    """Verify the client recovers from an expired/invalid token transparently.
+
+    Corrupts the live token to force a real 401 from Taiga, then confirms the
+    next call succeeds anyway via the refresh_token callback — this is the
+    one thing respx-mocked unit tests can't prove: that Taiga's actual auth
+    endpoint and 401 behavior line up with what the client expects.
+    """
+    print("\n== refresh on expired/invalid token ==")
+    client = server._get_client()
+    client._client.headers["Authorization"] = "Bearer invalid-token"
+    projects = await client.list_projects()
+    print(f"list_projects succeeded after forced 401 ({len(projects)} project(s)) "
+          "— token was refreshed transparently.")
+
+
 async def read_only_checks(pid: int) -> None:
     """Exercise the non-mutating tools against project `pid`."""
     print(f"\n== get_current_sprint (project {pid}) ==")
@@ -127,11 +143,19 @@ async def main() -> None:
     password = _smoke_env("PASSWORD")
     timeout = float(os.environ.get("TAIGA_TIMEOUT", "30"))
 
+    async def refresh_token() -> str:
+        token, _ = await authenticate(url, username, password, timeout)
+        return token
+
     token, user_id = await authenticate(url, username, password, timeout)
-    server._client = TaigaClient(url, token, user_id, timeout=timeout)
+    server._client = TaigaClient(
+        url, token, user_id, timeout=timeout, refresh_token=refresh_token
+    )
 
     print(f"== list_projects (user: {username}) ==")
     print(await server.list_projects())
+
+    await refresh_check()
 
     projects = await server._get_client().list_projects()
     if not projects:

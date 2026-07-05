@@ -1,3 +1,5 @@
+import asyncio
+from typing import Awaitable, Callable
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx
@@ -45,13 +47,28 @@ def _raise_for_taiga_error(response: httpx.Response) -> None:
 
 class TaigaClient:
     def __init__(
-        self, base_url: str, token: str, user_id: int, timeout: float = 30.0
+        self,
+        base_url: str,
+        token: str,
+        user_id: int,
+        timeout: float = 30.0,
+        refresh_token: Callable[[], Awaitable[str]] | None = None,
     ) -> None:
+        """
+        Args:
+            refresh_token: Optional callback returning a fresh auth token,
+                invoked on a 401 so a long-running MCP server can recover
+                from an expired session without a reconnect. The retried
+                request is only attempted once per call.
+        """
         self._base_url = base_url
         self._scheme = urlsplit(base_url).scheme
         self._user_id = user_id
-        self._headers = {"Authorization": f"Bearer {token}"}
-        self._client = httpx.AsyncClient(headers=self._headers, timeout=timeout)
+        self._client = httpx.AsyncClient(
+            headers={"Authorization": f"Bearer {token}"}, timeout=timeout
+        )
+        self._refresh_token = refresh_token
+        self._refresh_lock = asyncio.Lock()
 
     async def aclose(self) -> None:
         await self._client.aclose()
@@ -289,20 +306,32 @@ class TaigaClient:
             is_blocked=is_blocked, blocked_note=blocked_note,
         )
 
+    async def _send(self, method: str, url: str, **kwargs) -> httpx.Response:
+        """Issue a request, transparently re-authenticating once on a 401.
+
+        Taiga tokens expire; without this, a long-lived MCP server would
+        need a full reconnect to pick up a fresh one.
+        """
+        response = await self._client.request(method, url, **kwargs)
+        if response.status_code == 401 and self._refresh_token is not None:
+            async with self._refresh_lock:
+                token = await self._refresh_token()
+                self._client.headers["Authorization"] = f"Bearer {token}"
+            response = await self._client.request(method, url, **kwargs)
+        return response
+
     async def _get_one(self, path: str, params: dict | None = None) -> dict:
-        response = await self._client.get(
-            f"{self._base_url}{path}", params=params
-        )
+        response = await self._send("GET", f"{self._base_url}{path}", params=params)
         _raise_for_taiga_error(response)
         return response.json()
 
     async def _post(self, path: str, json: dict) -> dict:
-        response = await self._client.post(f"{self._base_url}{path}", json=json)
+        response = await self._send("POST", f"{self._base_url}{path}", json=json)
         _raise_for_taiga_error(response)
         return response.json()
 
     async def _patch(self, path: str, json: dict) -> dict:
-        response = await self._client.patch(f"{self._base_url}{path}", json=json)
+        response = await self._send("PATCH", f"{self._base_url}{path}", json=json)
         _raise_for_taiga_error(response)
         return response.json()
 
@@ -322,7 +351,7 @@ class TaigaClient:
         seen: set[str] = set()
         while url and url not in seen:
             seen.add(url)
-            response = await self._client.get(url, params=params)
+            response = await self._send("GET", url, params=params)
             _raise_for_taiga_error(response)
             results.extend(response.json())
             # Taiga returns the full URL of the next page (query params

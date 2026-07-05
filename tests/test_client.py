@@ -168,6 +168,55 @@ def test_client_applies_configured_timeout():
     assert client._client.timeout == httpx.Timeout(5.0)
 
 
+@respx.mock
+async def test_expired_token_is_refreshed_and_request_retried():
+    respx.get(f"{TAIGA_URL}/projects").mock(
+        side_effect=[
+            httpx.Response(401, json={"_error_message": "Token expired"}),
+            httpx.Response(200, json=[
+                {"id": 1, "name": "Booking Engine", "slug": "booking-engine"}
+            ]),
+        ]
+    )
+
+    async def refresh_token() -> str:
+        return "new-token"
+
+    client = TaigaClient(
+        TAIGA_URL, "stale-token", user_id=42, refresh_token=refresh_token
+    )
+    projects = await client.list_projects()
+    assert projects[0].name == "Booking Engine"
+    assert client._client.headers["Authorization"] == "Bearer new-token"
+
+
+@respx.mock
+async def test_refresh_only_retries_once():
+    route = respx.get(f"{TAIGA_URL}/projects").mock(
+        return_value=httpx.Response(401, json={"_error_message": "Still expired"})
+    )
+
+    async def refresh_token() -> str:
+        return "another-token"
+
+    client = TaigaClient(
+        TAIGA_URL, "stale-token", user_id=42, refresh_token=refresh_token
+    )
+    with pytest.raises(RuntimeError, match="401"):
+        await client.list_projects()
+    assert route.call_count == 2
+
+
+@respx.mock
+async def test_no_refresh_callback_raises_on_401():
+    respx.get(f"{TAIGA_URL}/projects").mock(
+        return_value=httpx.Response(401, json={"_error_message": "Token expired"})
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    with pytest.raises(RuntimeError, match="401"):
+        await client.list_projects()
+
+
 def test_build_payload_omits_none_and_clears_empty_string():
     result = _build_payload({
         "a": None,        # omitted
