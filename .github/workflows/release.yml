@@ -1,0 +1,47 @@
+# Creates a GitHub Release when a version tag is pushed:
+#   git tag v1.0.0 && git push origin v1.0.0
+# The tag must match the version in pyproject.toml.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Check tag matches pyproject.toml version
+        run: |
+          version="$(uv version --short)"
+          tag="${GITHUB_REF_NAME#v}"
+          if [ "$version" != "$tag" ]; then
+            echo "Tag v$tag does not match pyproject.toml version $version" >&2
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run checks (lint, format, types, tests)
+        run: uv run pre-commit run --all-files
+
+      - name: Build sdist and wheel
+        run: uv build
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes
