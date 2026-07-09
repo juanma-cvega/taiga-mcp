@@ -81,7 +81,9 @@ async def write_lifecycle(pid: int) -> None:
     assert epic.project_slug, "create_epic response is missing project_extra_info"
 
     print("\n== get_epic ==")
-    print(await server.get_epic(epic_id=epic.id))
+    result = await server.get_epic(epic_id=epic.id)
+    print(result)
+    assert "Link:" in result, "get_epic output is missing the UI link"
 
     # Exercise status name->id resolution using a real status from this project.
     epic_statuses = await client._get("/epic-statuses", params={"project": pid})
@@ -109,7 +111,9 @@ async def write_lifecycle(pid: int) -> None:
     assert story.project_slug, "create_story response is missing project_extra_info"
 
     print("\n== get_story (should show tags/epic linkage) ==")
-    print(await server.get_story(story_id=story.id))
+    result = await server.get_story(story_id=story.id)
+    print(result)
+    assert "Link:" in result, "get_story output is missing the UI link"
 
     story_statuses = await client._get(
         "/userstory-statuses", params={"project": pid}

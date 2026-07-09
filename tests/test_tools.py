@@ -310,6 +310,26 @@ async def test_update_epic_by_ref_returns_link(mock_client, ui_base):
     assert "Link: https://tree.taiga.io/project/my-project/epic/5" in result
 
 
+async def test_get_story_returns_link(mock_client, ui_base):
+    mock_client.get_story.return_value = UserStory(
+        id=2, ref=9, subject="Story A", project=10,
+        project_extra_info={"slug": "my-project"},
+        status_extra_info={"name": "In progress"},
+    )
+    result = await server.get_story(story_id=2)
+    assert "Link: https://tree.taiga.io/project/my-project/us/9" in result
+
+
+async def test_get_epic_returns_link(mock_client, ui_base):
+    mock_client.get_epic.return_value = Epic(
+        id=1, ref=5, subject="Epic A", project=10,
+        project_extra_info={"slug": "my-project"},
+        status_extra_info={"name": "New"},
+    )
+    result = await server.get_epic(epic_id=1)
+    assert "Link: https://tree.taiga.io/project/my-project/epic/5" in result
+
+
 async def test_update_story_omits_link_when_slug_unavailable(mock_client, ui_base):
     mock_client.update_story.return_value = UserStory(
         id=2, ref=9, subject="Story A", project=10,

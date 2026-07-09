@@ -50,6 +50,9 @@ def _with_link(message: str, item) -> str:
 
 def _format_detail(item) -> str:
     lines = [f"#{item.ref} {item.subject} [{item.status}]"]
+    link = _permalink(item)
+    if link:
+        lines.append(f"Link: {link}")
     if getattr(item, "milestone_name", None):
         lines.append(f"Sprint: {item.milestone_name}")
     if item.assigned_to is not None:
