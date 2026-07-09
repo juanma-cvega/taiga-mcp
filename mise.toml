@@ -1,0 +1,14 @@
+[tools]
+python = "3.14"
+uv = "0.11.28"
+
+[tasks.setup]
+description = "Install project dependencies and git hooks via uv"
+run = [
+    "uv sync",
+    "uv run pre-commit install",
+]
+
+[tasks.check]
+description = "Run all pre-commit hooks (lint, format check, tests) on all files"
+run = "uv run pre-commit run --all-files"

@@ -7,7 +7,7 @@ name = "taiga-mcp"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.14"
 dependencies = [
     "httpx>=0.28.1",
     "mcp[cli]>=1.27.2",
@@ -23,9 +23,12 @@ packages = ["src/taiga_mcp"]
 
 [dependency-groups]
 dev = [
+    "mypy>=2.2.0",
+    "pre-commit>=4.6.0",
     "pytest>=9.0.3",
     "pytest-asyncio>=1.4.0",
     "respx>=0.23.1",
+    "ruff>=0.15.21",
 ]
 
 [tool.pytest.ini_options]

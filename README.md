@@ -6,11 +6,19 @@ and sprints — as tools an MCP client (e.g. Claude Code) can call.
 
 ## Requirements
 
-- Python >= 3.10
+- Python >= 3.14
 - [uv](https://docs.astral.sh/uv/)
 - A Taiga account (Taiga Cloud or self-hosted)
 
 ## Setup
+
+With [mise](https://mise.jdx.dev), install the pinned toolchain (Python and
+uv) and set up the environment (dependencies and git hooks, via uv):
+
+```bash
+mise install
+mise run setup
+```
 
 Copy the example environment file and fill in your credentials:
 
@@ -86,6 +94,12 @@ Run the test suite:
 
 ```bash
 uv run pytest
+```
+
+Run all pre-commit hooks (lint, format check, tests) without committing:
+
+```bash
+mise run check
 ```
 
 There is also a manual smoke test that hits a real Taiga account. It
