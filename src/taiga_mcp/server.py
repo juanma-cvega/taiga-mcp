@@ -67,18 +67,14 @@ def _format_detail(item) -> str:
         blocked += f" ({item.blocked_note})"
     lines.append(blocked)
     if item.tags:
-        names = [
-            tag[0] if isinstance(tag, (list, tuple)) else tag
-            for tag in item.tags
-        ]
+        names = [tag[0] if isinstance(tag, (list, tuple)) else tag for tag in item.tags]
         lines.append(f"Tags: {', '.join(names)}")
     epics = getattr(item, "epics", None)
     if epics:
         lines.append(
             "Epics: "
             + ", ".join(
-                f"#{e.get('ref', '?')} {e.get('subject', 'unknown')}"
-                for e in epics
+                f"#{e.get('ref', '?')} {e.get('subject', 'unknown')}" for e in epics
             )
         )
     lines.append(f"Description:\n{item.description or '—'}")
@@ -88,7 +84,9 @@ def _format_detail(item) -> str:
 async def init() -> None:
     global _client, _ui_base
     base_url = os.environ["TAIGA_URL"]
-    _ui_base = os.environ.get("TAIGA_UI_URL", "").rstrip("/") or _derive_ui_base(base_url)
+    _ui_base = os.environ.get("TAIGA_UI_URL", "").rstrip("/") or _derive_ui_base(
+        base_url
+    )
     username = os.environ["TAIGA_USERNAME"]
     password = os.environ["TAIGA_PASSWORD"]
     timeout = float(os.environ.get("TAIGA_TIMEOUT", "30"))
@@ -109,9 +107,7 @@ async def list_projects() -> str:
     projects = await _get_client().list_projects()
     if not projects:
         return "No projects found."
-    return "\n".join(
-        f"- {p.name} (slug: {p.slug}, id: {p.id})" for p in projects
-    )
+    return "\n".join(f"- {p.name} (slug: {p.slug}, id: {p.id})" for p in projects)
 
 
 @mcp.tool()
@@ -174,9 +170,7 @@ async def list_epics(project_id: int) -> str:
     epics = await _get_client().list_epics(project_id=project_id)
     if not epics:
         return "No epics found."
-    return "\n".join(
-        f"- #{e.ref} {e.subject} (id: {e.id}) [{e.status}]" for e in epics
-    )
+    return "\n".join(f"- #{e.ref} {e.subject} (id: {e.id}) [{e.status}]" for e in epics)
 
 
 @mcp.tool()
@@ -250,9 +244,15 @@ async def create_epic(
         color: Optional hex color.
     """
     epic = await _get_client().create_epic(
-        project_id=project_id, subject=subject, description=description,
-        status=status, assigned_to=assigned_to, tags=tags,
-        is_blocked=is_blocked, blocked_note=blocked_note, color=color,
+        project_id=project_id,
+        subject=subject,
+        description=description,
+        status=status,
+        assigned_to=assigned_to,
+        tags=tags,
+        is_blocked=is_blocked,
+        blocked_note=blocked_note,
+        color=color,
     )
     return _with_link(f"Created #{epic.ref} {epic.subject} (id: {epic.id})", epic)
 
@@ -286,9 +286,15 @@ async def create_story(
         blocked_note: Optional reason when blocked.
     """
     story = await _get_client().create_story(
-        project_id=project_id, subject=subject, description=description,
-        status=status, sprint_id=sprint_id, epic_id=epic_id,
-        assigned_to=assigned_to, tags=tags, is_blocked=is_blocked,
+        project_id=project_id,
+        subject=subject,
+        description=description,
+        status=status,
+        sprint_id=sprint_id,
+        epic_id=epic_id,
+        assigned_to=assigned_to,
+        tags=tags,
+        is_blocked=is_blocked,
         blocked_note=blocked_note,
     )
     return _with_link(f"Created #{story.ref} {story.subject} (id: {story.id})", story)
@@ -322,9 +328,15 @@ async def update_epic(
         color: Hex color ('' clears it).
     """
     epic = await _get_client().update_epic(
-        epic_id, subject=subject, description=description, status=status,
-        assigned_to=assigned_to, tags=tags, is_blocked=is_blocked,
-        blocked_note=blocked_note, color=color,
+        epic_id,
+        subject=subject,
+        description=description,
+        status=status,
+        assigned_to=assigned_to,
+        tags=tags,
+        is_blocked=is_blocked,
+        blocked_note=blocked_note,
+        color=color,
     )
     return _with_link(f"Updated #{epic.ref} {epic.subject} [{epic.status}]", epic)
 
@@ -357,9 +369,15 @@ async def update_story(
         blocked_note: Reason when blocked ('' clears it).
     """
     story = await _get_client().update_story(
-        story_id, subject=subject, description=description, status=status,
-        sprint_id=sprint_id, assigned_to=assigned_to, tags=tags,
-        is_blocked=is_blocked, blocked_note=blocked_note,
+        story_id,
+        subject=subject,
+        description=description,
+        status=status,
+        sprint_id=sprint_id,
+        assigned_to=assigned_to,
+        tags=tags,
+        is_blocked=is_blocked,
+        blocked_note=blocked_note,
     )
     return _with_link(f"Updated #{story.ref} {story.subject} [{story.status}]", story)
 
@@ -394,9 +412,16 @@ async def update_epic_by_ref(
         color: Hex color ('' clears it).
     """
     epic = await _get_client().update_epic_by_ref(
-        project_id, ref, subject=subject, description=description,
-        status=status, assigned_to=assigned_to, tags=tags,
-        is_blocked=is_blocked, blocked_note=blocked_note, color=color,
+        project_id,
+        ref,
+        subject=subject,
+        description=description,
+        status=status,
+        assigned_to=assigned_to,
+        tags=tags,
+        is_blocked=is_blocked,
+        blocked_note=blocked_note,
+        color=color,
     )
     return _with_link(f"Updated #{epic.ref} {epic.subject} [{epic.status}]", epic)
 
@@ -431,9 +456,16 @@ async def update_story_by_ref(
         blocked_note: Reason when blocked ('' clears it).
     """
     story = await _get_client().update_story_by_ref(
-        project_id, ref, subject=subject, description=description,
-        status=status, sprint_id=sprint_id, assigned_to=assigned_to,
-        tags=tags, is_blocked=is_blocked, blocked_note=blocked_note,
+        project_id,
+        ref,
+        subject=subject,
+        description=description,
+        status=status,
+        sprint_id=sprint_id,
+        assigned_to=assigned_to,
+        tags=tags,
+        is_blocked=is_blocked,
+        blocked_note=blocked_note,
     )
     return _with_link(f"Updated #{story.ref} {story.subject} [{story.status}]", story)
 

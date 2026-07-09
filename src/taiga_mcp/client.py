@@ -17,7 +17,7 @@ def _build_payload(fields: dict) -> dict:
     return payload
 
 
-def _require_field(current: dict, field: str, kind: str, item_id: int) -> object:
+def _require_field(current: dict, field: str, kind: str, item_id: int | str) -> int:
     """Fetch a required field from a Taiga response, raising a readable
     RuntimeError instead of a bare KeyError if the response shape doesn't
     match expectations (e.g. an unexpected/partial payload)."""
@@ -79,7 +79,9 @@ class TaigaClient:
         data = await self._get("/projects", params={"member": self._user_id})
         return [Project(**item) for item in data]
 
-    async def list_sprints(self, project_id: int, closed: bool | None = None) -> list[Sprint]:
+    async def list_sprints(
+        self, project_id: int, closed: bool | None = None
+    ) -> list[Sprint]:
         params: dict = {"project": project_id}
         if closed is not None:
             params["closed"] = str(closed).lower()
@@ -150,14 +152,18 @@ class TaigaClient:
             payload["status"] = await self._resolve_status(
                 "/epic-statuses", project_id, status
             )
-        payload.update(_build_payload({
-            "description": description,
-            "assigned_to": assigned_to,
-            "tags": tags,
-            "is_blocked": is_blocked,
-            "blocked_note": blocked_note,
-            "color": color,
-        }))
+        payload.update(
+            _build_payload(
+                {
+                    "description": description,
+                    "assigned_to": assigned_to,
+                    "tags": tags,
+                    "is_blocked": is_blocked,
+                    "blocked_note": blocked_note,
+                    "color": color,
+                }
+            )
+        )
         return Epic(**await self._post("/epics", payload))
 
     async def create_story(
@@ -178,14 +184,18 @@ class TaigaClient:
             payload["status"] = await self._resolve_status(
                 "/userstory-statuses", project_id, status
             )
-        payload.update(_build_payload({
-            "description": description,
-            "milestone": sprint_id,
-            "assigned_to": assigned_to,
-            "tags": tags,
-            "is_blocked": is_blocked,
-            "blocked_note": blocked_note,
-        }))
+        payload.update(
+            _build_payload(
+                {
+                    "description": description,
+                    "milestone": sprint_id,
+                    "assigned_to": assigned_to,
+                    "tags": tags,
+                    "is_blocked": is_blocked,
+                    "blocked_note": blocked_note,
+                }
+            )
+        )
         story = UserStory(**await self._post("/userstories", payload))
         if epic_id is not None:
             try:
@@ -219,15 +229,19 @@ class TaigaClient:
             payload["status"] = await self._resolve_status(
                 "/epic-statuses", project_id, status
             )
-        payload.update(_build_payload({
-            "subject": subject,
-            "description": description,
-            "assigned_to": assigned_to,
-            "tags": tags,
-            "is_blocked": is_blocked,
-            "blocked_note": blocked_note,
-            "color": color,
-        }))
+        payload.update(
+            _build_payload(
+                {
+                    "subject": subject,
+                    "description": description,
+                    "assigned_to": assigned_to,
+                    "tags": tags,
+                    "is_blocked": is_blocked,
+                    "blocked_note": blocked_note,
+                    "color": color,
+                }
+            )
+        )
         return Epic(**await self._patch(f"/epics/{epic_id}", payload))
 
     async def update_story(
@@ -249,15 +263,19 @@ class TaigaClient:
             payload["status"] = await self._resolve_status(
                 "/userstory-statuses", project_id, status
             )
-        payload.update(_build_payload({
-            "subject": subject,
-            "description": description,
-            "milestone": sprint_id,
-            "assigned_to": assigned_to,
-            "tags": tags,
-            "is_blocked": is_blocked,
-            "blocked_note": blocked_note,
-        }))
+        payload.update(
+            _build_payload(
+                {
+                    "subject": subject,
+                    "description": description,
+                    "milestone": sprint_id,
+                    "assigned_to": assigned_to,
+                    "tags": tags,
+                    "is_blocked": is_blocked,
+                    "blocked_note": blocked_note,
+                }
+            )
+        )
         return UserStory(**await self._patch(f"/userstories/{story_id}", payload))
 
     async def update_epic_by_ref(
@@ -278,9 +296,15 @@ class TaigaClient:
         )
         epic_id = _require_field(current, "id", "epic", f"#{ref}")
         return await self.update_epic(
-            epic_id, subject=subject, description=description, status=status,
-            assigned_to=assigned_to, tags=tags, is_blocked=is_blocked,
-            blocked_note=blocked_note, color=color,
+            epic_id,
+            subject=subject,
+            description=description,
+            status=status,
+            assigned_to=assigned_to,
+            tags=tags,
+            is_blocked=is_blocked,
+            blocked_note=blocked_note,
+            color=color,
         )
 
     async def update_story_by_ref(
@@ -301,9 +325,15 @@ class TaigaClient:
         )
         story_id = _require_field(current, "id", "story", f"#{ref}")
         return await self.update_story(
-            story_id, subject=subject, description=description, status=status,
-            sprint_id=sprint_id, assigned_to=assigned_to, tags=tags,
-            is_blocked=is_blocked, blocked_note=blocked_note,
+            story_id,
+            subject=subject,
+            description=description,
+            status=status,
+            sprint_id=sprint_id,
+            assigned_to=assigned_to,
+            tags=tags,
+            is_blocked=is_blocked,
+            blocked_note=blocked_note,
         )
 
     async def _send(self, method: str, url: str, **kwargs) -> httpx.Response:

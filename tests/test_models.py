@@ -3,9 +3,17 @@ from taiga_mcp.models import Epic, UserStory
 
 def test_epic_parses_detail_fields():
     e = Epic(
-        id=1, ref=5, subject="Epic A", project=10,
-        description="details", tags=[["urgent", "#f00"]], is_blocked=True,
-        blocked_note="waiting", assigned_to=42, color="#123456", version=3,
+        id=1,
+        ref=5,
+        subject="Epic A",
+        project=10,
+        description="details",
+        tags=[["urgent", "#f00"]],
+        is_blocked=True,
+        blocked_note="waiting",
+        assigned_to=42,
+        color="#123456",
+        version=3,
         status_extra_info={"name": "New"},
     )
     assert e.description == "details"
@@ -17,9 +25,16 @@ def test_epic_parses_detail_fields():
 
 def test_user_story_parses_detail_fields():
     s = UserStory(
-        id=2, ref=9, subject="Story A", project=10,
-        description="story details", tags=None, is_blocked=False,
-        blocked_note=None, assigned_to=None, version=7,
+        id=2,
+        ref=9,
+        subject="Story A",
+        project=10,
+        description="story details",
+        tags=None,
+        is_blocked=False,
+        blocked_note=None,
+        assigned_to=None,
+        version=7,
         status_extra_info={"name": "In progress"},
     )
     assert s.description == "story details"
@@ -35,7 +50,10 @@ def test_models_ignore_unknown_fields():
 
 def test_user_story_parses_epics_field():
     s = UserStory(
-        id=2, ref=9, subject="Story A", project=10,
+        id=2,
+        ref=9,
+        subject="Story A",
+        project=10,
         epics=[{"ref": 5, "subject": "Epic A"}],
     )
     assert s.epics == [{"ref": 5, "subject": "Epic A"}]

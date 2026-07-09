@@ -43,8 +43,10 @@ async def refresh_check() -> None:
     client = server._get_client()
     client._client.headers["Authorization"] = "Bearer invalid-token"
     projects = await client.list_projects()
-    print(f"list_projects succeeded after forced 401 ({len(projects)} project(s)) "
-          "— token was refreshed transparently.")
+    print(
+        f"list_projects succeeded after forced 401 ({len(projects)} project(s)) "
+        "— token was refreshed transparently."
+    )
 
 
 async def read_only_checks(pid: int) -> None:
@@ -118,9 +120,7 @@ async def write_lifecycle(pid: int) -> None:
     print(result)
     assert "Link:" in result, "get_story output is missing the UI link"
 
-    story_statuses = await client._get(
-        "/userstory-statuses", params={"project": pid}
-    )
+    story_statuses = await client._get("/userstory-statuses", params={"project": pid})
     story_status = story_statuses[-1]["name"] if story_statuses else None
 
     print("\n== update_story ==")
@@ -189,14 +189,18 @@ async def main() -> None:
                 f"TAIGA_SMOKE_PROJECT_SLUG='{slug}' not found among this "
                 f"account's projects. Available slugs: {available}"
             )
-        print(f"\nUsing smoke project '{smoke.name}' (slug: {smoke.slug}, "
-              f"id: {smoke.id}) — FULL lifecycle (writes enabled).")
+        print(
+            f"\nUsing smoke project '{smoke.name}' (slug: {smoke.slug}, "
+            f"id: {smoke.id}) — FULL lifecycle (writes enabled)."
+        )
         await read_only_checks(smoke.id)
         await write_lifecycle(smoke.id)
     else:
         pid = projects[0].id
-        print(f"\nTAIGA_SMOKE_PROJECT_SLUG not set — READ-ONLY run against "
-              f"project {pid}. Set it to a throwaway project to test writes.")
+        print(
+            f"\nTAIGA_SMOKE_PROJECT_SLUG not set — READ-ONLY run against "
+            f"project {pid}. Set it to a throwaway project to test writes."
+        )
         await read_only_checks(pid)
 
 

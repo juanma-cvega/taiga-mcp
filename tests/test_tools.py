@@ -29,7 +29,9 @@ def ui_base(monkeypatch):
 
 async def test_list_projects_formats_output(mock_client):
     mock_client.list_projects.return_value = [
-        Project(id=1, name="Booking Engine", slug="booking-engine", description="My project")
+        Project(
+            id=1, name="Booking Engine", slug="booking-engine", description="My project"
+        )
     ]
     result = await server.list_projects()
     assert "Booking Engine" in result
@@ -55,8 +57,14 @@ async def test_list_tasks_passes_user_story_filter(mock_client):
 
 async def test_get_current_sprint_formats_output(mock_client):
     mock_client.list_sprints.return_value = [
-        Sprint(id=10, name="Sprint 1", project=1, closed=False,
-               estimated_start="2026-06-01", estimated_finish="2026-06-14")
+        Sprint(
+            id=10,
+            name="Sprint 1",
+            project=1,
+            closed=False,
+            estimated_start="2026-06-01",
+            estimated_finish="2026-06-14",
+        )
     ]
     result = await server.get_current_sprint(project_id=1)
     assert "Sprint 1" in result
@@ -70,8 +78,13 @@ async def test_get_current_sprint_no_open_sprint(mock_client):
 
 async def test_list_epics_formats_output(mock_client):
     mock_client.list_epics.return_value = [
-        Epic(id=30, ref=11, subject="Create sqs consumer library", project=1,
-             status_extra_info={"name": "New"})
+        Epic(
+            id=30,
+            ref=11,
+            subject="Create sqs consumer library",
+            project=1,
+            status_extra_info={"name": "New"},
+        )
     ]
     result = await server.list_epics(project_id=1)
     assert "Create sqs consumer library" in result
@@ -88,8 +101,13 @@ async def test_list_epics_empty(mock_client):
 
 async def test_list_user_stories_formats_output_with_id(mock_client):
     mock_client.list_user_stories.return_value = [
-        UserStory(id=5, ref=3, subject="Book a slot", project=1,
-                  status_extra_info={"name": "In progress"})
+        UserStory(
+            id=5,
+            ref=3,
+            subject="Book a slot",
+            project=1,
+            status_extra_info={"name": "In progress"},
+        )
     ]
     result = await server.list_user_stories(project_id=1)
     assert "Book a slot" in result
@@ -99,8 +117,13 @@ async def test_list_user_stories_formats_output_with_id(mock_client):
 
 async def test_list_tasks_formats_output_with_id(mock_client):
     mock_client.list_tasks.return_value = [
-        Task(id=20, ref=7, subject="Implement endpoint", project=1,
-             status_extra_info={"name": "Done"})
+        Task(
+            id=20,
+            ref=7,
+            subject="Implement endpoint",
+            project=1,
+            status_extra_info={"name": "Done"},
+        )
     ]
     result = await server.list_tasks(project_id=1)
     assert "Implement endpoint" in result
@@ -109,9 +132,15 @@ async def test_list_tasks_formats_output_with_id(mock_client):
 
 async def test_get_story_formats_detail(mock_client):
     mock_client.get_story.return_value = UserStory(
-        id=2, ref=9, subject="Story A", project=10,
-        milestone_name="Sprint 1", description="the details",
-        is_blocked=True, blocked_note="waiting", assigned_to=42,
+        id=2,
+        ref=9,
+        subject="Story A",
+        project=10,
+        milestone_name="Sprint 1",
+        description="the details",
+        is_blocked=True,
+        blocked_note="waiting",
+        assigned_to=42,
         status_extra_info={"name": "In progress"},
     )
     result = await server.get_story(story_id=2)
@@ -124,7 +153,10 @@ async def test_get_story_formats_detail(mock_client):
 
 async def test_get_story_by_ref_formats_detail(mock_client):
     mock_client.get_story_by_ref.return_value = UserStory(
-        id=2, ref=9, subject="Story A", project=10,
+        id=2,
+        ref=9,
+        subject="Story A",
+        project=10,
         status_extra_info={"name": "In progress"},
     )
     result = await server.get_story_by_ref(project_id=10, ref=9)
@@ -135,7 +167,10 @@ async def test_get_story_by_ref_formats_detail(mock_client):
 
 async def test_get_epic_by_ref_formats_detail(mock_client):
     mock_client.get_epic_by_ref.return_value = Epic(
-        id=1, ref=5, subject="Epic A", project=10,
+        id=1,
+        ref=5,
+        subject="Epic A",
+        project=10,
         status_extra_info={"name": "New"},
     )
     result = await server.get_epic_by_ref(project_id=10, ref=5)
@@ -146,10 +181,15 @@ async def test_get_epic_by_ref_formats_detail(mock_client):
 
 async def test_update_story_by_ref_returns_updated_status(mock_client):
     mock_client.update_story_by_ref.return_value = UserStory(
-        id=2, ref=9, subject="Story A", project=10,
+        id=2,
+        ref=9,
+        subject="Story A",
+        project=10,
         status_extra_info={"name": "In progress"},
     )
-    result = await server.update_story_by_ref(project_id=10, ref=9, status="In progress")
+    result = await server.update_story_by_ref(
+        project_id=10, ref=9, status="In progress"
+    )
     mock_client.update_story_by_ref.assert_called_once()
     assert "#9 Story A" in result
     assert "In progress" in result
@@ -157,7 +197,10 @@ async def test_update_story_by_ref_returns_updated_status(mock_client):
 
 async def test_update_epic_by_ref_returns_updated_status(mock_client):
     mock_client.update_epic_by_ref.return_value = Epic(
-        id=1, ref=5, subject="Epic A", project=10,
+        id=1,
+        ref=5,
+        subject="Epic A",
+        project=10,
         status_extra_info={"name": "Done"},
     )
     result = await server.update_epic_by_ref(project_id=10, ref=5, status="Done")
@@ -168,8 +211,12 @@ async def test_update_epic_by_ref_returns_updated_status(mock_client):
 
 async def test_get_epic_formats_detail(mock_client):
     mock_client.get_epic.return_value = Epic(
-        id=1, ref=5, subject="Epic A", project=10,
-        description="epic details", color="#123456",
+        id=1,
+        ref=5,
+        subject="Epic A",
+        project=10,
+        description="epic details",
+        color="#123456",
         status_extra_info={"name": "New"},
     )
     result = await server.get_epic(epic_id=1)
@@ -180,7 +227,10 @@ async def test_get_epic_formats_detail(mock_client):
 
 async def test_get_epic_formats_tags(mock_client):
     mock_client.get_epic.return_value = Epic(
-        id=1, ref=5, subject="Epic A", project=10,
+        id=1,
+        ref=5,
+        subject="Epic A",
+        project=10,
         tags=[["urgent", "#f00"], ["backend", None]],
         status_extra_info={"name": "New"},
     )
@@ -191,7 +241,10 @@ async def test_get_epic_formats_tags(mock_client):
 
 async def test_get_story_formats_tags_and_epics(mock_client):
     mock_client.get_story.return_value = UserStory(
-        id=2, ref=9, subject="Story A", project=10,
+        id=2,
+        ref=9,
+        subject="Story A",
+        project=10,
         tags=[["urgent", "#f00"]],
         epics=[{"ref": 5, "subject": "Epic A"}],
         status_extra_info={"name": "In progress"},
@@ -204,7 +257,10 @@ async def test_get_story_formats_tags_and_epics(mock_client):
 
 async def test_get_story_formats_epics_defensively_on_missing_keys(mock_client):
     mock_client.get_story.return_value = UserStory(
-        id=2, ref=9, subject="Story A", project=10,
+        id=2,
+        ref=9,
+        subject="Story A",
+        project=10,
         epics=[{"ref": 5}],  # missing 'subject'
         status_extra_info={"name": "In progress"},
     )
@@ -214,7 +270,10 @@ async def test_get_story_formats_epics_defensively_on_missing_keys(mock_client):
 
 async def test_create_epic_returns_created_ref(mock_client):
     mock_client.create_epic.return_value = Epic(
-        id=50, ref=11, subject="New epic", project=10,
+        id=50,
+        ref=11,
+        subject="New epic",
+        project=10,
         status_extra_info={"name": "New"},
     )
     result = await server.create_epic(project_id=10, subject="New epic")
@@ -226,14 +285,24 @@ async def test_create_epic_returns_created_ref(mock_client):
 
 async def test_create_story_returns_created_ref(mock_client):
     mock_client.create_story.return_value = UserStory(
-        id=60, ref=20, subject="New story", project=10,
+        id=60,
+        ref=20,
+        subject="New story",
+        project=10,
         status_extra_info={"name": "New"},
     )
     result = await server.create_story(project_id=10, subject="New story", epic_id=5)
     mock_client.create_story.assert_called_once_with(
-        project_id=10, subject="New story", description=None, status=None,
-        sprint_id=None, epic_id=5, assigned_to=None, tags=None,
-        is_blocked=None, blocked_note=None,
+        project_id=10,
+        subject="New story",
+        description=None,
+        status=None,
+        sprint_id=None,
+        epic_id=5,
+        assigned_to=None,
+        tags=None,
+        is_blocked=None,
+        blocked_note=None,
     )
     assert "#20" in result
     assert "New story" in result
@@ -241,7 +310,10 @@ async def test_create_story_returns_created_ref(mock_client):
 
 async def test_update_epic_returns_updated_status(mock_client):
     mock_client.update_epic.return_value = Epic(
-        id=1, ref=5, subject="Epic A", project=10,
+        id=1,
+        ref=5,
+        subject="Epic A",
+        project=10,
         status_extra_info={"name": "Done"},
     )
     result = await server.update_epic(epic_id=1, status="Done")
@@ -252,7 +324,10 @@ async def test_update_epic_returns_updated_status(mock_client):
 
 async def test_update_story_returns_updated_status(mock_client):
     mock_client.update_story.return_value = UserStory(
-        id=2, ref=9, subject="Story A", project=10,
+        id=2,
+        ref=9,
+        subject="Story A",
+        project=10,
         status_extra_info={"name": "In progress"},
     )
     result = await server.update_story(story_id=2, status="In progress")
@@ -262,17 +337,28 @@ async def test_update_story_returns_updated_status(mock_client):
 
 
 def test_derive_ui_base_maps_taiga_cloud_api_host_to_ui_host():
-    assert server._derive_ui_base("https://api.taiga.io/api/v1") == "https://tree.taiga.io"
+    assert (
+        server._derive_ui_base("https://api.taiga.io/api/v1") == "https://tree.taiga.io"
+    )
 
 
 def test_derive_ui_base_strips_api_path_on_self_hosted():
-    assert server._derive_ui_base("https://taiga.example.com/api/v1") == "https://taiga.example.com"
-    assert server._derive_ui_base("https://example.com/taiga/api/v1/") == "https://example.com/taiga"
+    assert (
+        server._derive_ui_base("https://taiga.example.com/api/v1")
+        == "https://taiga.example.com"
+    )
+    assert (
+        server._derive_ui_base("https://example.com/taiga/api/v1/")
+        == "https://example.com/taiga"
+    )
 
 
 async def test_create_story_returns_link(mock_client, ui_base):
     mock_client.create_story.return_value = UserStory(
-        id=60, ref=20, subject="New story", project=10,
+        id=60,
+        ref=20,
+        subject="New story",
+        project=10,
         project_extra_info={"slug": "my-project"},
         status_extra_info={"name": "New"},
     )
@@ -282,7 +368,10 @@ async def test_create_story_returns_link(mock_client, ui_base):
 
 async def test_create_epic_returns_link(mock_client, ui_base):
     mock_client.create_epic.return_value = Epic(
-        id=50, ref=11, subject="New epic", project=10,
+        id=50,
+        ref=11,
+        subject="New epic",
+        project=10,
         project_extra_info={"slug": "my-project"},
         status_extra_info={"name": "New"},
     )
@@ -292,7 +381,10 @@ async def test_create_epic_returns_link(mock_client, ui_base):
 
 async def test_update_story_returns_link(mock_client, ui_base):
     mock_client.update_story.return_value = UserStory(
-        id=2, ref=9, subject="Story A", project=10,
+        id=2,
+        ref=9,
+        subject="Story A",
+        project=10,
         project_extra_info={"slug": "my-project"},
         status_extra_info={"name": "In progress"},
     )
@@ -302,7 +394,10 @@ async def test_update_story_returns_link(mock_client, ui_base):
 
 async def test_update_epic_by_ref_returns_link(mock_client, ui_base):
     mock_client.update_epic_by_ref.return_value = Epic(
-        id=1, ref=5, subject="Epic A", project=10,
+        id=1,
+        ref=5,
+        subject="Epic A",
+        project=10,
         project_extra_info={"slug": "my-project"},
         status_extra_info={"name": "Done"},
     )
@@ -312,7 +407,10 @@ async def test_update_epic_by_ref_returns_link(mock_client, ui_base):
 
 async def test_get_story_returns_link(mock_client, ui_base):
     mock_client.get_story.return_value = UserStory(
-        id=2, ref=9, subject="Story A", project=10,
+        id=2,
+        ref=9,
+        subject="Story A",
+        project=10,
         project_extra_info={"slug": "my-project"},
         status_extra_info={"name": "In progress"},
     )
@@ -322,7 +420,10 @@ async def test_get_story_returns_link(mock_client, ui_base):
 
 async def test_get_epic_returns_link(mock_client, ui_base):
     mock_client.get_epic.return_value = Epic(
-        id=1, ref=5, subject="Epic A", project=10,
+        id=1,
+        ref=5,
+        subject="Epic A",
+        project=10,
         project_extra_info={"slug": "my-project"},
         status_extra_info={"name": "New"},
     )
@@ -332,9 +433,14 @@ async def test_get_epic_returns_link(mock_client, ui_base):
 
 async def test_list_tasks_returns_link_per_task(mock_client, ui_base):
     mock_client.list_tasks.return_value = [
-        Task(id=20, ref=7, subject="Implement endpoint", project=1,
-             project_extra_info={"slug": "my-project"},
-             status_extra_info={"name": "Done"})
+        Task(
+            id=20,
+            ref=7,
+            subject="Implement endpoint",
+            project=1,
+            project_extra_info={"slug": "my-project"},
+            status_extra_info={"name": "Done"},
+        )
     ]
     result = await server.list_tasks(project_id=1)
     assert "https://tree.taiga.io/project/my-project/task/7" in result
@@ -342,8 +448,13 @@ async def test_list_tasks_returns_link_per_task(mock_client, ui_base):
 
 async def test_list_tasks_omits_link_when_slug_unavailable(mock_client, ui_base):
     mock_client.list_tasks.return_value = [
-        Task(id=20, ref=7, subject="Implement endpoint", project=1,
-             status_extra_info={"name": "Done"})
+        Task(
+            id=20,
+            ref=7,
+            subject="Implement endpoint",
+            project=1,
+            status_extra_info={"name": "Done"},
+        )
     ]
     result = await server.list_tasks(project_id=1)
     assert "—" not in result
@@ -352,7 +463,10 @@ async def test_list_tasks_omits_link_when_slug_unavailable(mock_client, ui_base)
 
 async def test_update_story_omits_link_when_slug_unavailable(mock_client, ui_base):
     mock_client.update_story.return_value = UserStory(
-        id=2, ref=9, subject="Story A", project=10,
+        id=2,
+        ref=9,
+        subject="Story A",
+        project=10,
         status_extra_info={"name": "In progress"},
     )
     result = await server.update_story(story_id=2, status="In progress")
