@@ -29,7 +29,8 @@ TAIGA_PASSWORD=your_password
 server's `/api/v1`.
 
 The create, update, and get tools return a link to the item in the Taiga web
-UI so the result can be verified manually. The UI base URL is derived
+UI so the result can be verified manually, and `list_tasks` includes one per
+task. The UI base URL is derived
 from `TAIGA_URL` (Taiga Cloud's `api.taiga.io` maps to `tree.taiga.io`;
 self-hosted instances drop the `/api/v1` suffix). If the derivation is wrong
 for your setup (e.g. a proxy serves the UI elsewhere), set `TAIGA_UI_URL`

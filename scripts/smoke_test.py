@@ -59,7 +59,10 @@ async def read_only_checks(pid: int) -> None:
     print(await server.list_user_stories(project_id=pid))
 
     print(f"\n== list_tasks (project {pid}) ==")
-    print(await server.list_tasks(project_id=pid))
+    result = await server.list_tasks(project_id=pid)
+    print(result)
+    if "No tasks found" not in result:
+        assert "/task/" in result, "list_tasks output is missing task UI links"
 
 
 async def write_lifecycle(pid: int) -> None:

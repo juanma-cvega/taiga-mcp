@@ -54,12 +54,19 @@ class Task(BaseModel):
     project: int
     user_story: int | None = None
     status_extra_info: dict | None = None
+    project_extra_info: dict | None = None
 
     @property
     def status(self) -> str:
         if self.status_extra_info:
             return self.status_extra_info.get("name", "unknown")
         return "unknown"
+
+    @property
+    def project_slug(self) -> str | None:
+        if self.project_extra_info:
+            return self.project_extra_info.get("slug")
+        return None
 
 
 class Epic(BaseModel):

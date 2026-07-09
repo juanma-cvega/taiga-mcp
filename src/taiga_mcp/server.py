@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 from taiga_mcp.auth import authenticate
 from taiga_mcp.client import TaigaClient
-from taiga_mcp.models import Epic
+from taiga_mcp.models import Epic, Task
 
 load_dotenv()
 
@@ -39,7 +39,12 @@ def _permalink(item) -> str | None:
     slug = getattr(item, "project_slug", None)
     if _ui_base is None or slug is None:
         return None
-    kind = "epic" if isinstance(item, Epic) else "us"
+    if isinstance(item, Epic):
+        kind = "epic"
+    elif isinstance(item, Task):
+        kind = "task"
+    else:
+        kind = "us"
     return f"{_ui_base}/project/{slug}/{kind}/{item.ref}"
 
 
@@ -149,9 +154,13 @@ async def list_tasks(project_id: int, user_story_id: int | None = None) -> str:
     )
     if not tasks:
         return "No tasks found."
-    return "\n".join(
-        f"- #{t.ref} {t.subject} (id: {t.id}) [{t.status}]" for t in tasks
-    )
+
+    def line(t) -> str:
+        text = f"- #{t.ref} {t.subject} (id: {t.id}) [{t.status}]"
+        link = _permalink(t)
+        return f"{text} — {link}" if link else text
+
+    return "\n".join(line(t) for t in tasks)
 
 
 @mcp.tool()

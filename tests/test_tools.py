@@ -330,6 +330,26 @@ async def test_get_epic_returns_link(mock_client, ui_base):
     assert "Link: https://tree.taiga.io/project/my-project/epic/5" in result
 
 
+async def test_list_tasks_returns_link_per_task(mock_client, ui_base):
+    mock_client.list_tasks.return_value = [
+        Task(id=20, ref=7, subject="Implement endpoint", project=1,
+             project_extra_info={"slug": "my-project"},
+             status_extra_info={"name": "Done"})
+    ]
+    result = await server.list_tasks(project_id=1)
+    assert "https://tree.taiga.io/project/my-project/task/7" in result
+
+
+async def test_list_tasks_omits_link_when_slug_unavailable(mock_client, ui_base):
+    mock_client.list_tasks.return_value = [
+        Task(id=20, ref=7, subject="Implement endpoint", project=1,
+             status_extra_info={"name": "Done"})
+    ]
+    result = await server.list_tasks(project_id=1)
+    assert "—" not in result
+    assert "#7 Implement endpoint" in result
+
+
 async def test_update_story_omits_link_when_slug_unavailable(mock_client, ui_base):
     mock_client.update_story.return_value = UserStory(
         id=2, ref=9, subject="Story A", project=10,
