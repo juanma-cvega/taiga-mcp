@@ -31,6 +31,7 @@ class UserStory(BaseModel):
     assigned_to: int | None = None
     version: int | None = None
     status_extra_info: dict | None = None
+    project_extra_info: dict | None = None
     epics: list | None = None
 
     @property
@@ -38,6 +39,12 @@ class UserStory(BaseModel):
         if self.status_extra_info:
             return self.status_extra_info.get("name", "unknown")
         return "unknown"
+
+    @property
+    def project_slug(self) -> str | None:
+        if self.project_extra_info:
+            return self.project_extra_info.get("slug")
+        return None
 
 
 class Task(BaseModel):
@@ -68,9 +75,16 @@ class Epic(BaseModel):
     color: str | None = None
     version: int | None = None
     status_extra_info: dict | None = None
+    project_extra_info: dict | None = None
 
     @property
     def status(self) -> str:
         if self.status_extra_info:
             return self.status_extra_info.get("name", "unknown")
         return "unknown"
+
+    @property
+    def project_slug(self) -> str | None:
+        if self.project_extra_info:
+            return self.project_extra_info.get("slug")
+        return None

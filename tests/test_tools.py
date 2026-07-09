@@ -18,7 +18,13 @@ def mock_client(monkeypatch):
     mock.list_sprints.return_value = []
     mock.list_epics.return_value = []
     monkeypatch.setattr(server, "_client", mock)
+    monkeypatch.setattr(server, "_ui_base", None)
     return mock
+
+
+@pytest.fixture
+def ui_base(monkeypatch):
+    monkeypatch.setattr(server, "_ui_base", "https://tree.taiga.io")
 
 
 async def test_list_projects_formats_output(mock_client):
@@ -253,6 +259,91 @@ async def test_update_story_returns_updated_status(mock_client):
     mock_client.update_story.assert_called_once()
     assert "#9 Story A" in result
     assert "In progress" in result
+
+
+def test_derive_ui_base_maps_taiga_cloud_api_host_to_ui_host():
+    assert server._derive_ui_base("https://api.taiga.io/api/v1") == "https://tree.taiga.io"
+
+
+def test_derive_ui_base_strips_api_path_on_self_hosted():
+    assert server._derive_ui_base("https://taiga.example.com/api/v1") == "https://taiga.example.com"
+    assert server._derive_ui_base("https://example.com/taiga/api/v1/") == "https://example.com/taiga"
+
+
+async def test_create_story_returns_link(mock_client, ui_base):
+    mock_client.create_story.return_value = UserStory(
+        id=60, ref=20, subject="New story", project=10,
+        project_extra_info={"slug": "my-project"},
+        status_extra_info={"name": "New"},
+    )
+    result = await server.create_story(project_id=10, subject="New story")
+    assert "Link: https://tree.taiga.io/project/my-project/us/20" in result
+
+
+async def test_create_epic_returns_link(mock_client, ui_base):
+    mock_client.create_epic.return_value = Epic(
+        id=50, ref=11, subject="New epic", project=10,
+        project_extra_info={"slug": "my-project"},
+        status_extra_info={"name": "New"},
+    )
+    result = await server.create_epic(project_id=10, subject="New epic")
+    assert "Link: https://tree.taiga.io/project/my-project/epic/11" in result
+
+
+async def test_update_story_returns_link(mock_client, ui_base):
+    mock_client.update_story.return_value = UserStory(
+        id=2, ref=9, subject="Story A", project=10,
+        project_extra_info={"slug": "my-project"},
+        status_extra_info={"name": "In progress"},
+    )
+    result = await server.update_story(story_id=2, status="In progress")
+    assert "Link: https://tree.taiga.io/project/my-project/us/9" in result
+
+
+async def test_update_epic_by_ref_returns_link(mock_client, ui_base):
+    mock_client.update_epic_by_ref.return_value = Epic(
+        id=1, ref=5, subject="Epic A", project=10,
+        project_extra_info={"slug": "my-project"},
+        status_extra_info={"name": "Done"},
+    )
+    result = await server.update_epic_by_ref(project_id=10, ref=5, status="Done")
+    assert "Link: https://tree.taiga.io/project/my-project/epic/5" in result
+
+
+async def test_update_story_omits_link_when_slug_unavailable(mock_client, ui_base):
+    mock_client.update_story.return_value = UserStory(
+        id=2, ref=9, subject="Story A", project=10,
+        status_extra_info={"name": "In progress"},
+    )
+    result = await server.update_story(story_id=2, status="In progress")
+    assert "Link:" not in result
+    assert "#9 Story A" in result
+
+
+@respx.mock
+async def test_init_sets_ui_base_from_env_override(monkeypatch):
+    monkeypatch.setenv("TAIGA_URL", TAIGA_URL)
+    monkeypatch.setenv("TAIGA_UI_URL", "https://taiga.internal/")
+    monkeypatch.setenv("TAIGA_USERNAME", "user")
+    monkeypatch.setenv("TAIGA_PASSWORD", "pass")
+    respx.post(f"{TAIGA_URL}/auth").mock(
+        return_value=httpx.Response(200, json={"auth_token": "t", "id": 42})
+    )
+    await server.init()
+    assert server._ui_base == "https://taiga.internal"
+
+
+@respx.mock
+async def test_init_derives_ui_base_when_no_override(monkeypatch):
+    monkeypatch.setenv("TAIGA_URL", TAIGA_URL)
+    monkeypatch.delenv("TAIGA_UI_URL", raising=False)
+    monkeypatch.setenv("TAIGA_USERNAME", "user")
+    monkeypatch.setenv("TAIGA_PASSWORD", "pass")
+    respx.post(f"{TAIGA_URL}/auth").mock(
+        return_value=httpx.Response(200, json={"auth_token": "t", "id": 42})
+    )
+    await server.init()
+    assert server._ui_base == "https://tree.taiga.io"
 
 
 @respx.mock

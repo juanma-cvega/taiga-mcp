@@ -1,20 +1,51 @@
 import asyncio
 import os
+import re
+from urllib.parse import urlsplit, urlunsplit
+
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 from taiga_mcp.auth import authenticate
 from taiga_mcp.client import TaigaClient
+from taiga_mcp.models import Epic
 
 load_dotenv()
 
 mcp = FastMCP("taiga")
 _client: TaigaClient | None = None
+_ui_base: str | None = None
 
 
 def _get_client() -> TaigaClient:
     if _client is None:
         raise RuntimeError("Client not initialised — call init() first")
     return _client
+
+
+def _derive_ui_base(api_url: str) -> str:
+    """Derive the web-UI base URL from the API URL: drop the trailing
+    /api/vN path segment, and map Taiga Cloud's API host to its UI host
+    (the two live on different subdomains)."""
+    ui_url = re.sub(r"/api/v\d+/?$", "", api_url.rstrip("/"))
+    parts = urlsplit(ui_url)
+    if parts.netloc == "api.taiga.io":
+        parts = parts._replace(netloc="tree.taiga.io")
+    return urlunsplit(parts)
+
+
+def _permalink(item) -> str | None:
+    """Web-UI URL for an epic or story, so a human can eyeball the result
+    of a write. None when the UI base or project slug is unavailable."""
+    slug = getattr(item, "project_slug", None)
+    if _ui_base is None or slug is None:
+        return None
+    kind = "epic" if isinstance(item, Epic) else "us"
+    return f"{_ui_base}/project/{slug}/{kind}/{item.ref}"
+
+
+def _with_link(message: str, item) -> str:
+    link = _permalink(item)
+    return f"{message}\nLink: {link}" if link else message
 
 
 def _format_detail(item) -> str:
@@ -47,8 +78,9 @@ def _format_detail(item) -> str:
 
 
 async def init() -> None:
-    global _client
+    global _client, _ui_base
     base_url = os.environ["TAIGA_URL"]
+    _ui_base = os.environ.get("TAIGA_UI_URL", "").rstrip("/") or _derive_ui_base(base_url)
     username = os.environ["TAIGA_USERNAME"]
     password = os.environ["TAIGA_PASSWORD"]
     timeout = float(os.environ.get("TAIGA_TIMEOUT", "30"))
@@ -210,7 +242,7 @@ async def create_epic(
         status=status, assigned_to=assigned_to, tags=tags,
         is_blocked=is_blocked, blocked_note=blocked_note, color=color,
     )
-    return f"Created #{epic.ref} {epic.subject} (id: {epic.id})"
+    return _with_link(f"Created #{epic.ref} {epic.subject} (id: {epic.id})", epic)
 
 
 @mcp.tool()
@@ -247,7 +279,7 @@ async def create_story(
         assigned_to=assigned_to, tags=tags, is_blocked=is_blocked,
         blocked_note=blocked_note,
     )
-    return f"Created #{story.ref} {story.subject} (id: {story.id})"
+    return _with_link(f"Created #{story.ref} {story.subject} (id: {story.id})", story)
 
 
 @mcp.tool()
@@ -282,7 +314,7 @@ async def update_epic(
         assigned_to=assigned_to, tags=tags, is_blocked=is_blocked,
         blocked_note=blocked_note, color=color,
     )
-    return f"Updated #{epic.ref} {epic.subject} [{epic.status}]"
+    return _with_link(f"Updated #{epic.ref} {epic.subject} [{epic.status}]", epic)
 
 
 @mcp.tool()
@@ -317,7 +349,7 @@ async def update_story(
         sprint_id=sprint_id, assigned_to=assigned_to, tags=tags,
         is_blocked=is_blocked, blocked_note=blocked_note,
     )
-    return f"Updated #{story.ref} {story.subject} [{story.status}]"
+    return _with_link(f"Updated #{story.ref} {story.subject} [{story.status}]", story)
 
 
 @mcp.tool()
@@ -354,7 +386,7 @@ async def update_epic_by_ref(
         status=status, assigned_to=assigned_to, tags=tags,
         is_blocked=is_blocked, blocked_note=blocked_note, color=color,
     )
-    return f"Updated #{epic.ref} {epic.subject} [{epic.status}]"
+    return _with_link(f"Updated #{epic.ref} {epic.subject} [{epic.status}]", epic)
 
 
 @mcp.tool()
@@ -391,7 +423,7 @@ async def update_story_by_ref(
         status=status, sprint_id=sprint_id, assigned_to=assigned_to,
         tags=tags, is_blocked=is_blocked, blocked_note=blocked_note,
     )
-    return f"Updated #{story.ref} {story.subject} [{story.status}]"
+    return _with_link(f"Updated #{story.ref} {story.subject} [{story.status}]", story)
 
 
 @mcp.tool()

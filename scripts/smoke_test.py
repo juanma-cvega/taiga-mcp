@@ -78,6 +78,7 @@ async def write_lifecycle(pid: int) -> None:
         description="Created by smoke_test.py",
     )
     print(f"created epic #{epic.ref} (id {epic.id})")
+    assert epic.project_slug, "create_epic response is missing project_extra_info"
 
     print("\n== get_epic ==")
     print(await server.get_epic(epic_id=epic.id))
@@ -87,11 +88,15 @@ async def write_lifecycle(pid: int) -> None:
     epic_status = epic_statuses[-1]["name"] if epic_statuses else None
 
     print("\n== update_epic ==")
-    print(await server.update_epic(
+    result = await server.update_epic(
         epic_id=epic.id,
         description="Updated by smoke_test.py",
         status=epic_status,
-    ))
+    )
+    print(result)
+    # The verification link depends on the real API including
+    # project_extra_info in write responses — mocked tests can't prove that.
+    assert "Link:" in result, "update_epic output is missing the UI link"
 
     print(f"\n== create_story (project {pid}, linked to epic #{epic.ref}) ==")
     story = await client.create_story(
@@ -101,6 +106,7 @@ async def write_lifecycle(pid: int) -> None:
         epic_id=epic.id,
     )
     print(f"created story #{story.ref} (id {story.id})")
+    assert story.project_slug, "create_story response is missing project_extra_info"
 
     print("\n== get_story (should show tags/epic linkage) ==")
     print(await server.get_story(story_id=story.id))
@@ -111,11 +117,13 @@ async def write_lifecycle(pid: int) -> None:
     story_status = story_statuses[-1]["name"] if story_statuses else None
 
     print("\n== update_story ==")
-    print(await server.update_story(
+    result = await server.update_story(
         story_id=story.id,
         description="Updated by smoke_test.py",
         status=story_status,
-    ))
+    )
+    print(result)
+    assert "Link:" in result, "update_story output is missing the UI link"
 
 
 def _smoke_env(name: str) -> str:
@@ -151,6 +159,9 @@ async def main() -> None:
     server._client = TaigaClient(
         url, token, user_id, timeout=timeout, refresh_token=refresh_token
     )
+    # server.init() is bypassed here, so set the UI base the same way it
+    # would — the write lifecycle asserts the tools return UI links.
+    server._ui_base = server._derive_ui_base(url)
 
     print(f"== list_projects (user: {username}) ==")
     print(await server.list_projects())
