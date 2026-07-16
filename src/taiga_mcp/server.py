@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 from taiga_mcp.auth import authenticate
 from taiga_mcp.client import TaigaClient
-from taiga_mcp.models import Epic, Task
+from taiga_mcp.models import Epic, Sprint, Task
 
 load_dotenv()
 
@@ -34,11 +34,17 @@ def _derive_ui_base(api_url: str) -> str:
 
 
 def _permalink(item) -> str | None:
-    """Web-UI URL for an epic or story, so a human can eyeball the result
-    of a write. None when the UI base or project slug is unavailable."""
+    """Web-UI URL for an epic, story, task or sprint, so a human can eyeball
+    the result of a write. None when the UI base or project slug is
+    unavailable."""
     slug = getattr(item, "project_slug", None)
     if _ui_base is None or slug is None:
         return None
+    if isinstance(item, Sprint):
+        # A sprint has no #ref; the UI addresses its taskboard by sprint slug.
+        if item.slug is None:
+            return None
+        return f"{_ui_base}/project/{slug}/taskboard/{item.slug}"
     if isinstance(item, Epic):
         kind = "epic"
     elif isinstance(item, Task):
@@ -78,6 +84,19 @@ def _format_detail(item) -> str:
             )
         )
     lines.append(f"Description:\n{item.description or '—'}")
+    return "\n".join(lines)
+
+
+def _format_sprint(sprint: Sprint) -> str:
+    lines = [
+        f"Sprint: {sprint.name} (id: {sprint.id})",
+        f"Start:  {sprint.estimated_start}",
+        f"End:    {sprint.estimated_finish}",
+        f"Status: {'closed' if sprint.closed else 'open'}",
+    ]
+    link = _permalink(sprint)
+    if link:
+        lines.append(f"Link: {link}")
     return "\n".join(lines)
 
 
@@ -481,13 +500,138 @@ async def get_current_sprint(project_id: int) -> str:
     sprints = await _get_client().list_sprints(project_id=project_id, closed=False)
     if not sprints:
         return "No open sprint found for this project."
-    s = sprints[0]
-    return (
-        f"Sprint: {s.name}\n"
-        f"Start:  {s.estimated_start}\n"
-        f"End:    {s.estimated_finish}\n"
-        f"ID:     {s.id}"
+    return _format_sprint(sprints[0])
+
+
+@mcp.tool()
+async def list_sprints(project_id: int, closed: bool | None = None) -> str:
+    """
+    List sprints (milestones) for a Taiga project.
+
+    Args:
+        project_id: Numeric Taiga project ID.
+        closed: Optional filter — True for closed sprints only, False for open
+            ones only. Omit for all sprints.
+    """
+    sprints = await _get_client().list_sprints(project_id=project_id, closed=closed)
+    if not sprints:
+        return "No sprints found."
+    return "\n".join(
+        f"- {s.name} (id: {s.id}) {s.estimated_start} → {s.estimated_finish} "
+        f"[{'closed' if s.closed else 'open'}]"
+        for s in sprints
     )
+
+
+@mcp.tool()
+async def get_sprint(sprint_id: int) -> str:
+    """
+    Get a single Taiga sprint (milestone) by its numeric id.
+
+    Args:
+        sprint_id: Numeric Taiga sprint (milestone) ID.
+    """
+    return _format_sprint(await _get_client().get_sprint(sprint_id))
+
+
+@mcp.tool()
+async def create_sprint(
+    project_id: int,
+    name: str,
+    estimated_start: str,
+    estimated_finish: str,
+) -> str:
+    """
+    Create a Taiga sprint (milestone).
+
+    Args:
+        project_id: Numeric Taiga project ID.
+        name: Sprint name (required, and must be unique within the project).
+        estimated_start: Start date, YYYY-MM-DD (required).
+        estimated_finish: End date, YYYY-MM-DD (required).
+    """
+    sprint = await _get_client().create_sprint(
+        project_id=project_id,
+        name=name,
+        estimated_start=estimated_start,
+        estimated_finish=estimated_finish,
+    )
+    return _with_link(f"Created sprint {sprint.name} (id: {sprint.id})", sprint)
+
+
+@mcp.tool()
+async def update_sprint(
+    sprint_id: int,
+    name: str | None = None,
+    estimated_start: str | None = None,
+    estimated_finish: str | None = None,
+    closed: bool | None = None,
+) -> str:
+    """
+    Update a Taiga sprint (milestone). Any argument left as None is unchanged.
+
+    Args:
+        sprint_id: Numeric Taiga sprint (milestone) ID.
+        name: New name (must be unique within the project).
+        estimated_start: New start date, YYYY-MM-DD.
+        estimated_finish: New end date, YYYY-MM-DD.
+        closed: True to close the sprint, False to reopen it.
+    """
+    sprint = await _get_client().update_sprint(
+        sprint_id,
+        name=name,
+        estimated_start=estimated_start,
+        estimated_finish=estimated_finish,
+        closed=closed,
+    )
+    return _with_link(
+        f"Updated sprint {sprint.name} [{'closed' if sprint.closed else 'open'}]",
+        sprint,
+    )
+
+
+@mcp.tool()
+async def close_sprint(sprint_id: int) -> str:
+    """
+    Close a Taiga sprint (milestone). Stories stay assigned to it; use
+    move_story_to_backlog first for any unfinished work that should carry over.
+
+    Args:
+        sprint_id: Numeric Taiga sprint (milestone) ID.
+    """
+    sprint = await _get_client().update_sprint(sprint_id, closed=True)
+    return _with_link(f"Closed sprint {sprint.name} (id: {sprint.id})", sprint)
+
+
+@mcp.tool()
+async def delete_sprint(sprint_id: int) -> str:
+    """
+    Delete a Taiga sprint (milestone) permanently. This cannot be undone.
+
+    The sprint's user stories are NOT deleted — Taiga detaches them and they
+    return to the backlog.
+
+    Args:
+        sprint_id: Numeric Taiga sprint (milestone) ID.
+    """
+    sprint = await _get_client().get_sprint(sprint_id)
+    await _get_client().delete_sprint(sprint_id)
+    return (
+        f"Deleted sprint {sprint.name} (id: {sprint.id}). Any stories it held "
+        f"are back in the backlog."
+    )
+
+
+@mcp.tool()
+async def move_story_to_backlog(story_id: int) -> str:
+    """
+    Move a user story out of its sprint and back to the project backlog.
+
+    Args:
+        story_id: Numeric Taiga user story ID.
+    """
+    story = await _get_client().move_story_to_backlog(story_id)
+    return _with_link(f"Moved #{story.ref} {story.subject} to the backlog", story)
 
 
 def main() -> None:

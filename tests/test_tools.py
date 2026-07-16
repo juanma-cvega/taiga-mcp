@@ -516,3 +516,154 @@ async def test_init_wires_a_working_refresh_callback(monkeypatch):
     new_token = await server._client._refresh_token()
     assert new_token == "refreshed-token"
     assert route.call_count == 2
+
+
+def _sprint(**overrides) -> Sprint:
+    return Sprint(
+        **{
+            "id": 10,
+            "name": "Sprint 1",
+            "slug": "sprint-1",
+            "project": 1,
+            "closed": False,
+            "estimated_start": "2026-06-01",
+            "estimated_finish": "2026-06-14",
+            "project_extra_info": {"slug": "my-project"},
+            **overrides,
+        }
+    )
+
+
+async def test_list_sprints_formats_output(mock_client):
+    mock_client.list_sprints.return_value = [_sprint(), _sprint(id=11, closed=True)]
+    result = await server.list_sprints(project_id=1)
+    mock_client.list_sprints.assert_called_once_with(project_id=1, closed=None)
+    # The id must be surfaced so callers can feed it to the update/close/delete
+    # tools, which are keyed by id.
+    assert "id: 10" in result
+    assert "[open]" in result
+    assert "[closed]" in result
+
+
+async def test_list_sprints_passes_closed_filter(mock_client):
+    await server.list_sprints(project_id=1, closed=False)
+    mock_client.list_sprints.assert_called_once_with(project_id=1, closed=False)
+
+
+async def test_list_sprints_empty(mock_client):
+    result = await server.list_sprints(project_id=1)
+    assert "No sprints found" in result
+
+
+async def test_get_sprint_formats_detail(mock_client):
+    mock_client.get_sprint.return_value = _sprint()
+    result = await server.get_sprint(sprint_id=10)
+    assert "Sprint 1" in result
+    assert "2026-06-14" in result
+    assert "open" in result
+
+
+async def test_create_sprint_returns_created_sprint(mock_client):
+    mock_client.create_sprint.return_value = _sprint()
+    result = await server.create_sprint(
+        project_id=1,
+        name="Sprint 1",
+        estimated_start="2026-06-01",
+        estimated_finish="2026-06-14",
+    )
+    mock_client.create_sprint.assert_called_once_with(
+        project_id=1,
+        name="Sprint 1",
+        estimated_start="2026-06-01",
+        estimated_finish="2026-06-14",
+    )
+    assert "Sprint 1" in result
+    assert "id: 10" in result
+
+
+async def test_create_sprint_returns_link(mock_client, ui_base):
+    mock_client.create_sprint.return_value = _sprint()
+    result = await server.create_sprint(
+        project_id=1,
+        name="Sprint 1",
+        estimated_start="2026-06-01",
+        estimated_finish="2026-06-14",
+    )
+    assert "Link: https://tree.taiga.io/project/my-project/taskboard/sprint-1" in result
+
+
+async def test_update_sprint_passes_fields(mock_client):
+    mock_client.update_sprint.return_value = _sprint(name="Renamed")
+    result = await server.update_sprint(sprint_id=10, name="Renamed")
+    mock_client.update_sprint.assert_called_once_with(
+        10,
+        name="Renamed",
+        estimated_start=None,
+        estimated_finish=None,
+        closed=None,
+    )
+    assert "Renamed" in result
+
+
+async def test_close_sprint_sets_closed(mock_client):
+    mock_client.update_sprint.return_value = _sprint(closed=True)
+    result = await server.close_sprint(sprint_id=10)
+    mock_client.update_sprint.assert_called_once_with(10, closed=True)
+    assert "Closed sprint Sprint 1" in result
+
+
+async def test_delete_sprint_names_the_deleted_sprint(mock_client):
+    mock_client.get_sprint.return_value = _sprint()
+    result = await server.delete_sprint(sprint_id=10)
+    mock_client.delete_sprint.assert_called_once_with(10)
+    assert "Deleted sprint Sprint 1" in result
+    assert "backlog" in result
+
+
+async def test_delete_sprint_does_not_delete_when_lookup_fails(mock_client):
+    mock_client.get_sprint.side_effect = RuntimeError("Taiga API error 404: Not found.")
+    with pytest.raises(RuntimeError):
+        await server.delete_sprint(sprint_id=10)
+    mock_client.delete_sprint.assert_not_called()
+
+
+async def test_move_story_to_backlog_returns_story(mock_client):
+    mock_client.move_story_to_backlog.return_value = UserStory(
+        id=2,
+        ref=9,
+        subject="Story A",
+        project=10,
+        status_extra_info={"name": "New"},
+    )
+    result = await server.move_story_to_backlog(story_id=2)
+    mock_client.move_story_to_backlog.assert_called_once_with(2)
+    assert "#9 Story A" in result
+    assert "backlog" in result
+
+
+async def test_move_story_to_backlog_returns_link(mock_client, ui_base):
+    mock_client.move_story_to_backlog.return_value = UserStory(
+        id=2,
+        ref=9,
+        subject="Story A",
+        project=10,
+        project_extra_info={"slug": "my-project"},
+        status_extra_info={"name": "New"},
+    )
+    result = await server.move_story_to_backlog(story_id=2)
+    assert "Link: https://tree.taiga.io/project/my-project/us/9" in result
+
+
+async def test_sprint_permalink_omitted_when_sprint_slug_unavailable(
+    mock_client, ui_base
+):
+    mock_client.get_sprint.return_value = _sprint(slug=None)
+    result = await server.get_sprint(sprint_id=10)
+    assert "Link:" not in result
+    assert "Sprint 1" in result
+
+
+async def test_get_current_sprint_returns_link(mock_client, ui_base):
+    mock_client.list_sprints.return_value = [_sprint()]
+    result = await server.get_current_sprint(project_id=1)
+    assert "Link: https://tree.taiga.io/project/my-project/taskboard/sprint-1" in result

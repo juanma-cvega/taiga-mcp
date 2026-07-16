@@ -88,6 +88,64 @@ class TaigaClient:
         data = await self._get("/milestones", params=params)
         return [Sprint(**item) for item in data]
 
+    async def get_sprint(self, sprint_id: int) -> Sprint:
+        return Sprint(**await self._get_one(f"/milestones/{sprint_id}"))
+
+    async def create_sprint(
+        self,
+        project_id: int,
+        name: str,
+        estimated_start: str,
+        estimated_finish: str,
+    ) -> Sprint:
+        return Sprint(
+            **await self._post(
+                "/milestones",
+                {
+                    "project": project_id,
+                    "name": name,
+                    "estimated_start": estimated_start,
+                    "estimated_finish": estimated_finish,
+                },
+            )
+        )
+
+    async def update_sprint(
+        self,
+        sprint_id: int,
+        name: str | None = None,
+        estimated_start: str | None = None,
+        estimated_finish: str | None = None,
+        closed: bool | None = None,
+    ) -> Sprint:
+        # Milestones are not version-checked by Taiga (unlike stories and
+        # epics), so there is no version to read back before patching.
+        payload = _build_payload(
+            {
+                "name": name,
+                "estimated_start": estimated_start,
+                "estimated_finish": estimated_finish,
+                "closed": closed,
+            }
+        )
+        return Sprint(**await self._patch(f"/milestones/{sprint_id}", payload))
+
+    async def delete_sprint(self, sprint_id: int) -> None:
+        await self._delete(f"/milestones/{sprint_id}")
+
+    async def move_story_to_backlog(self, story_id: int) -> UserStory:
+        """Detach a story from its sprint, returning it to the backlog.
+
+        Not expressible via update_story: there a sprint_id of None means
+        'leave the sprint unchanged', so the null can't be sent.
+        """
+        current = await self._get_one(f"/userstories/{story_id}")
+        payload = {
+            "version": _require_field(current, "version", "story", story_id),
+            "milestone": None,
+        }
+        return UserStory(**await self._patch(f"/userstories/{story_id}", payload))
+
     async def list_user_stories(
         self,
         project_id: int,
@@ -364,6 +422,10 @@ class TaigaClient:
         response = await self._send("PATCH", f"{self._base_url}{path}", json=json)
         _raise_for_taiga_error(response)
         return response.json()
+
+    async def _delete(self, path: str) -> None:
+        response = await self._send("DELETE", f"{self._base_url}{path}")
+        _raise_for_taiga_error(response)
 
     async def _resolve_status(
         self, status_endpoint: str, project_id: int, name: str

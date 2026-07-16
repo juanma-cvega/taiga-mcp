@@ -782,3 +782,164 @@ async def test_update_story_maps_sprint_and_sends_version():
     assert body["version"] == 6
     assert body["milestone"] == 99
     assert "status" not in body
+
+
+SPRINT_JSON = {
+    "id": 10,
+    "name": "Sprint 1",
+    "slug": "sprint-1",
+    "project": 1,
+    "closed": False,
+    "estimated_start": "2026-06-01",
+    "estimated_finish": "2026-06-14",
+    "project_extra_info": {"slug": "my-project"},
+}
+
+
+@respx.mock
+async def test_list_sprints_filters_by_closed():
+    route = respx.get(f"{TAIGA_URL}/milestones").mock(
+        return_value=httpx.Response(200, json=[SPRINT_JSON])
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    await client.list_sprints(project_id=1, closed=True)
+    assert route.calls.last.request.url.params["closed"] == "true"
+
+
+@respx.mock
+async def test_get_sprint_fetches_single_object():
+    respx.get(f"{TAIGA_URL}/milestones/10").mock(
+        return_value=httpx.Response(200, json=SPRINT_JSON)
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    sprint = await client.get_sprint(10)
+    assert sprint.name == "Sprint 1"
+    assert sprint.slug == "sprint-1"
+    assert sprint.project_slug == "my-project"
+
+
+@respx.mock
+async def test_create_sprint_posts_project_name_and_dates():
+    route = respx.post(f"{TAIGA_URL}/milestones").mock(
+        return_value=httpx.Response(201, json=SPRINT_JSON)
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    sprint = await client.create_sprint(
+        project_id=1,
+        name="Sprint 1",
+        estimated_start="2026-06-01",
+        estimated_finish="2026-06-14",
+    )
+    body = json.loads(route.calls.last.request.content)
+    assert body == {
+        "project": 1,
+        "name": "Sprint 1",
+        "estimated_start": "2026-06-01",
+        "estimated_finish": "2026-06-14",
+    }
+    assert sprint.id == 10
+
+
+@respx.mock
+async def test_update_sprint_patches_only_given_fields_without_version():
+    route = respx.patch(f"{TAIGA_URL}/milestones/10").mock(
+        return_value=httpx.Response(200, json={**SPRINT_JSON, "name": "Renamed"})
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    sprint = await client.update_sprint(10, name="Renamed")
+    body = json.loads(route.calls.last.request.content)
+    # Milestones are not version-checked by Taiga, so no GET-then-PATCH round
+    # trip is needed and no version must be sent.
+    assert body == {"name": "Renamed"}
+    assert sprint.name == "Renamed"
+
+
+@respx.mock
+async def test_update_sprint_sends_closed_false_to_reopen():
+    route = respx.patch(f"{TAIGA_URL}/milestones/10").mock(
+        return_value=httpx.Response(200, json=SPRINT_JSON)
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    await client.update_sprint(10, closed=False)
+    # closed=False must reach Taiga, not be dropped as an unset field.
+    assert json.loads(route.calls.last.request.content) == {"closed": False}
+
+
+@respx.mock
+async def test_update_sprint_closes_sprint():
+    route = respx.patch(f"{TAIGA_URL}/milestones/10").mock(
+        return_value=httpx.Response(200, json={**SPRINT_JSON, "closed": True})
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    sprint = await client.update_sprint(10, closed=True)
+    assert json.loads(route.calls.last.request.content) == {"closed": True}
+    assert sprint.closed is True
+
+
+@respx.mock
+async def test_delete_sprint_issues_delete():
+    route = respx.delete(f"{TAIGA_URL}/milestones/10").mock(
+        return_value=httpx.Response(204)
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    await client.delete_sprint(10)
+    assert route.called
+
+
+@respx.mock
+async def test_delete_sprint_raises_readable_error_on_http_failure():
+    respx.delete(f"{TAIGA_URL}/milestones/10").mock(
+        return_value=httpx.Response(404, json={"_error_message": "Not found."})
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    with pytest.raises(RuntimeError) as exc:
+        await client.delete_sprint(10)
+    assert "404" in str(exc.value)
+    assert "Not found." in str(exc.value)
+
+
+@respx.mock
+async def test_move_story_to_backlog_nulls_milestone_with_version():
+    respx.get(f"{TAIGA_URL}/userstories/2").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": 2,
+                "ref": 9,
+                "subject": "Story A",
+                "project": 10,
+                "milestone": 10,
+                "version": 6,
+            },
+        )
+    )
+    route = respx.patch(f"{TAIGA_URL}/userstories/2").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": 2,
+                "ref": 9,
+                "subject": "Story A",
+                "project": 10,
+                "milestone": None,
+            },
+        )
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    story = await client.move_story_to_backlog(2)
+    body = json.loads(route.calls.last.request.content)
+    assert body == {"version": 6, "milestone": None}
+    assert story.milestone is None
+
+
+@respx.mock
+async def test_move_story_to_backlog_raises_readable_error_on_missing_version():
+    respx.get(f"{TAIGA_URL}/userstories/2").mock(
+        return_value=httpx.Response(
+            200, json={"id": 2, "ref": 9, "subject": "Story A", "project": 10}
+        )
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    with pytest.raises(RuntimeError) as exc:
+        await client.move_story_to_backlog(2)
+    assert "version" in str(exc.value)

@@ -1,8 +1,8 @@
 # taiga-mcp
 
-An [MCP](https://modelcontextprotocol.io) server that exposes read-only access
-to a [Taiga](https://taiga.io) account — projects, epics, user stories, tasks,
-and sprints — as tools an MCP client (e.g. Claude Code) can call.
+An [MCP](https://modelcontextprotocol.io) server that exposes a
+[Taiga](https://taiga.io) account — projects, epics, user stories, tasks, and
+sprints — as tools an MCP client (e.g. Claude Code) can call.
 
 ## Requirements
 
@@ -67,7 +67,14 @@ claude mcp add taiga -- uv run --directory /path/to/taiga-mcp taiga-mcp
 | `list_epics` | `project_id` | List epics for a project. |
 | `list_user_stories` | `project_id`, `sprint_id?`, `status?` (`open`/`closed`) | List user stories for a project, optionally filtered by sprint or status. |
 | `list_tasks` | `project_id`, `user_story_id?` | List tasks for a project, optionally scoped to a user story. |
+| `list_sprints` | `project_id`, `closed?` | List sprints for a project, optionally filtered to open or closed ones. |
 | `get_current_sprint` | `project_id` | Get the currently open sprint for a project. |
+| `get_sprint` | `sprint_id` | Get a single sprint by id. |
+| `create_sprint` | `project_id`, `name`, `estimated_start`, `estimated_finish` | Create a sprint. Dates are `YYYY-MM-DD`; the name must be unique within the project. |
+| `update_sprint` | `sprint_id`, + optional `name`, `estimated_start`, `estimated_finish`, `closed` | Update a sprint. `None` leaves a field unchanged; `closed=False` reopens a closed sprint. |
+| `close_sprint` | `sprint_id` | Close a sprint. |
+| `delete_sprint` | `sprint_id` | Delete a sprint permanently. Its stories are **not** deleted — Taiga returns them to the backlog. |
+| `move_story_to_backlog` | `story_id` | Move a story out of its sprint and back to the backlog. |
 | `create_epic` | `project_id`, `subject`, + optional `description`, `status`, `assigned_to`, `tags`, `is_blocked`, `blocked_note`, `color` | Create an epic. `status` is a status name. |
 | `create_story` | `project_id`, `subject`, + optional `description`, `status`, `sprint_id`, `epic_id`, `assigned_to`, `tags`, `is_blocked`, `blocked_note` | Create a story, optionally linked to an epic. |
 | `get_epic` | `epic_id` | Get a single epic by id with its full field set. |
@@ -120,11 +127,14 @@ uv run python scripts/smoke_test.py
 To exercise the full create/get/update lifecycle without touching real work,
 create a dedicated throwaway project in Taiga and point the smoke test at it by
 slug (the tool cannot create projects itself). It then creates an epic and a
-linked story there, updates them, and reads them back:
+linked story there, updates them, and reads them back, and finally runs the
+sprint lifecycle — create a sprint, move the story in and out of it, close the
+sprint and delete it:
 
 ```bash
 TAIGA_SMOKE_PROJECT_SLUG=your-smoke-project uv run python scripts/smoke_test.py
 ```
 
-The client has no delete operation, so each full run leaves a new (timestamped)
-epic and story behind in the smoke project.
+Epics and stories have no delete operation, so each full run leaves a new
+(timestamped) epic and story behind in the smoke project. The sprint it creates
+is deleted at the end of the run.

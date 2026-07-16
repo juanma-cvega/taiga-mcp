@@ -14,17 +14,20 @@ against the first project without mutating anything.
 To exercise the full create/get/update lifecycle, point it at a dedicated
 throwaway project via TAIGA_SMOKE_PROJECT_SLUG (create the project once in
 Taiga first — this tool cannot create projects). When set, the run creates an
-epic and a linked story in that project, updates them, and reads them back.
+epic and a linked story in that project, updates them, and reads them back. It
+then runs the sprint lifecycle: create a sprint, move the story in and out of
+it, close the sprint and delete it.
 
     TAIGA_SMOKE_PROJECT_SLUG=your-smoke-project uv run python scripts/smoke_test.py
 
-Note: the client has no delete operation, so each full run leaves a new
-(timestamped) epic + story behind in the smoke project.
+Note: epics and stories have no delete operation, so each full run leaves a new
+(timestamped) epic + story behind in the smoke project. The sprint it creates
+is deleted at the end of the run.
 """
 
 import asyncio
 import os
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from taiga_mcp import server  # importing loads .env via server's load_dotenv()
 from taiga_mcp.auth import authenticate
@@ -131,6 +134,78 @@ async def write_lifecycle(pid: int) -> None:
     )
     print(result)
     assert "Link:" in result, "update_story output is missing the UI link"
+
+    await sprint_lifecycle(pid, story.id, stamp)
+
+
+async def sprint_lifecycle(pid: int, story_id: int, stamp: str) -> None:
+    """Exercise the full sprint lifecycle, ending in a delete.
+
+    Unlike the epic/story lifecycle this leaves nothing behind: the sprint is
+    deleted at the end, which also verifies Taiga's documented behaviour of
+    detaching (not deleting) the sprint's stories.
+    """
+    client = server._get_client()
+    today = date.today()
+
+    print(f"\n== create_sprint (project {pid}) ==")
+    result = await server.create_sprint(
+        project_id=pid,
+        name=f"[smoke {stamp}] sprint",
+        estimated_start=today.isoformat(),
+        estimated_finish=(today + timedelta(days=14)).isoformat(),
+    )
+    print(result)
+    # The taskboard link depends on the real API returning slug +
+    # project_extra_info on a create — mocked tests can't prove that.
+    assert "Link:" in result, "create_sprint output is missing the UI link"
+
+    sprints = await client.list_sprints(project_id=pid, closed=False)
+    sprint = next(s for s in sprints if s.name == f"[smoke {stamp}] sprint")
+    print(f"created sprint {sprint.name} (id {sprint.id})")
+
+    print("\n== update_sprint (rename + move the end date) ==")
+    print(
+        await server.update_sprint(
+            sprint_id=sprint.id,
+            name=f"[smoke {stamp}] sprint (renamed)",
+            estimated_finish=(today + timedelta(days=21)).isoformat(),
+        )
+    )
+
+    print(f"\n== update_story: move story {story_id} into the sprint ==")
+    print(await server.update_story(story_id=story_id, sprint_id=sprint.id))
+    in_sprint = await client.list_user_stories(project_id=pid, sprint_id=sprint.id)
+    assert any(s.id == story_id for s in in_sprint), "story was not added to the sprint"
+
+    print("\n== move_story_to_backlog ==")
+    result = await server.move_story_to_backlog(story_id=story_id)
+    print(result)
+    story = await client.get_story(story_id)
+    assert story.milestone is None, "story still has a sprint after the backlog move"
+
+    # Put the story back so the delete below is exercised on a NON-empty
+    # sprint — that's the case where detach-vs-cascade actually matters.
+    await server.update_story(story_id=story_id, sprint_id=sprint.id)
+
+    print("\n== close_sprint ==")
+    print(await server.close_sprint(sprint_id=sprint.id))
+    assert (await client.get_sprint(sprint.id)).closed is True, "sprint did not close"
+
+    print("\n== get_sprint (closed) ==")
+    print(await server.get_sprint(sprint_id=sprint.id))
+
+    print("\n== delete_sprint (with the story still in it) ==")
+    print(await server.delete_sprint(sprint_id=sprint.id))
+    remaining = await client.list_sprints(project_id=pid)
+    assert not any(s.id == sprint.id for s in remaining), "sprint was not deleted"
+    # Taiga's UserStory.milestone is on_delete=SET_NULL, so deleting a sprint
+    # must return its stories to the backlog rather than delete them. The
+    # delete_sprint tool tells users this — verify it against the real API.
+    survivor = await client.get_story(story_id)
+    assert survivor.milestone is None, (
+        "story kept a milestone pointing at the deleted sprint"
+    )
 
 
 def _smoke_env(name: str) -> str:
