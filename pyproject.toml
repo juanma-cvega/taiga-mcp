@@ -48,7 +48,12 @@ version_toml = ["pyproject.toml:project.version"]
 # `assets` is dual-purpose: these files are both committed alongside the
 # version bump AND attached to the GitHub Release, which is why uv.lock shows
 # up as a download next to the sdist and wheel.
-build_command = "uv lock && uv build"
+#
+# The `pip install uv` is not redundant with the workflow's setup-uv step: the
+# PSR GitHub Action is a Docker action, so build_command runs inside a
+# python:3-slim container that cannot see anything installed on the runner
+# host. Without this the build dies with "uv: not found" (exit 127).
+build_command = "pip install uv && uv lock && uv build"
 assets = ["uv.lock"]
 # Conventional, so the release commit itself parses as a no-op release. The
 # [skip ci] guard is belt-and-braces: pushes made with GITHUB_TOKEN already

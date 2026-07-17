@@ -9,5 +9,8 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 
+# Build artifacts (uv build, run by the release workflow and locally)
+dist/
+
 # Virtualenv
 .venv/
