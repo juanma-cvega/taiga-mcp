@@ -4,8 +4,9 @@
 # checks and stops -- no bump, no tag, no release.
 #
 # python-semantic-release owns the version end to end: it reads the commit
-# history since the last tag, stamps pyproject.toml and uv.lock, writes the
-# changelog, commits, tags v{version} and publishes the GitHub Release.
+# history since the last tag, stamps pyproject.toml, writes the changelog,
+# commits, tags v{version} and publishes the GitHub Release (notes only -- see
+# the note on immutable releases below for why no build artifacts are attached).
 # Never bump the version by hand -- the commit history is the source of truth.
 # Settings live in [tool.semantic_release] in pyproject.toml.
 name: Release
@@ -58,17 +59,12 @@ jobs:
         run: uv run pre-commit run --all-files
 
       - name: Release | Bump the version, commit, tag and release
-        id: release
+        # No asset upload step follows: GitHub creates releases as immutable,
+        # so assets have to be sealed in at creation, which PSR's separate
+        # upload step cannot do -- it would fail the run after tagging. The
+        # tag and the generated release notes are the release.
         uses: python-semantic-release/python-semantic-release@v10
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           git_committer_name: github-actions
           git_committer_email: actions@users.noreply.github.com
-
-      - name: Release | Upload the sdist and wheel to the release
-        # Skipped when the push had nothing releasable in it.
-        if: steps.release.outputs.released == 'true'
-        uses: python-semantic-release/publish-action@v10
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ steps.release.outputs.tag }}

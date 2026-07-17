@@ -109,10 +109,13 @@ Commits](https://www.conventionalcommits.org) since the last tag:
 | any type with a `BREAKING CHANGE:` footer | major (1.1.0 → 2.0.0) |
 | `chore:`, `docs:`, `ci:`, `test:`, `style:`, `refactor:` | none — no release |
 
-When there's something to release it bumps `pyproject.toml` and `uv.lock`,
+When there's something to release it bumps the version in `pyproject.toml`,
 writes `CHANGELOG.md`, commits as `chore: release X.Y.Z`, tags `vX.Y.Z`, and
-publishes a GitHub Release with the sdist and wheel attached. A push with no
-releasable commits just runs the checks.
+publishes a GitHub Release with generated notes. A push with no releasable
+commits just runs the checks. (No build artifacts are attached: GitHub creates
+releases as immutable, so assets must be sealed in at creation, which the
+release tooling's separate upload step can't do — the tag and notes are the
+release.)
 
 **Never edit the version by hand** — the commit history is the source of
 truth, and a manual edit will be overwritten by the next release. Since the
