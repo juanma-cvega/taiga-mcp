@@ -34,3 +34,24 @@ dev = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.semantic_release]
+# The version is derived from the Conventional Commits in the history and is
+# owned end to end by CI (.github/workflows/release.yml) -- do not edit the
+# version above by hand. feat: -> minor, fix:/perf: -> patch, a BREAKING
+# CHANGE: footer -> major; anything else releases nothing.
+commit_parser = "conventional"
+version_toml = ["pyproject.toml:project.version"]
+# uv.lock records the project's own version too, so re-lock after the bump and
+# carry the result in the release commit, or the lockfile drifts behind
+# pyproject.toml and the next `uv sync` rewrites it under someone's feet.
+# `assets` is dual-purpose: these files are both committed alongside the
+# version bump AND attached to the GitHub Release, which is why uv.lock shows
+# up as a download next to the sdist and wheel.
+build_command = "uv lock && uv build"
+assets = ["uv.lock"]
+# Conventional, so the release commit itself parses as a no-op release. The
+# [skip ci] guard is belt-and-braces: pushes made with GITHUB_TOKEN already
+# don't retrigger workflows, but that stops being true if this ever moves to a
+# PAT (e.g. to satisfy branch protection).
+commit_message = "chore: release {version} [skip ci]"

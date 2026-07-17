@@ -95,6 +95,31 @@ All list tools follow Taiga's pagination automatically, and `list_projects` is
 scoped to the authenticated user (an unfiltered query would return every public
 project on the platform).
 
+## Releasing
+
+Releases are automatic. Every push to `main` runs the checks, and
+[python-semantic-release](https://python-semantic-release.readthedocs.io)
+derives the next version from the [Conventional
+Commits](https://www.conventionalcommits.org) since the last tag:
+
+| Commit | Bump |
+| --- | --- |
+| `feat: …` | minor (1.1.0 → 1.2.0) |
+| `fix: …` / `perf: …` | patch (1.1.0 → 1.1.1) |
+| any type with a `BREAKING CHANGE:` footer | major (1.1.0 → 2.0.0) |
+| `chore:`, `docs:`, `ci:`, `test:`, `style:`, `refactor:` | none — no release |
+
+When there's something to release it bumps `pyproject.toml` and `uv.lock`,
+writes `CHANGELOG.md`, commits as `chore: release X.Y.Z`, tags `vX.Y.Z`, and
+publishes a GitHub Release with the sdist and wheel attached. A push with no
+releasable commits just runs the checks.
+
+**Never edit the version by hand** — the commit history is the source of
+truth, and a manual edit will be overwritten by the next release. Since the
+release commit lands on `main`, `git pull` after a release.
+
+Your commit type is what picks the version, so it's worth getting right.
+
 ## Development
 
 Run the test suite:

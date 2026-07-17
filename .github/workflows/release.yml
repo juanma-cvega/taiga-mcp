@@ -1,47 +1,74 @@
-# Creates a GitHub Release when a version tag is pushed:
-#   git tag v1.0.0 && git push origin v1.0.0
-# The tag must match the version in pyproject.toml.
+# Releases on every push to main that carries a releasable commit:
+#   feat: -> minor    fix:/perf: -> patch    BREAKING CHANGE: footer -> major
+# A push with only chore:/docs:/ci:/test:/style:/refactor: commits runs the
+# checks and stops -- no bump, no tag, no release.
+#
+# python-semantic-release owns the version end to end: it reads the commit
+# history since the last tag, stamps pyproject.toml and uv.lock, writes the
+# changelog, commits, tags v{version} and publishes the GitHub Release.
+# Never bump the version by hand -- the commit history is the source of truth.
+# Settings live in [tool.semantic_release] in pyproject.toml.
 name: Release
 
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   release:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - name: Install uv
+    # Serialise releases: two pushes in flight would otherwise race to compute
+    # and tag the same version. Never cancel a half-finished release.
+    concurrency:
+      group: ${{ github.workflow }}-release-${{ github.ref_name }}
+      cancel-in-progress: false
+
+    permissions:
+      contents: write # push the release commit and tag, create the release
+
+    steps:
+      - name: Setup | Check out the release branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          # The action does not unshallow, and semantic-release needs the full
+          # history plus tags to find the last release and pick the bump.
+          fetch-depth: 0
+
+      - name: Setup | Pin the release branch to this workflow's commit
+        # Guards against releasing a newer commit that landed on main while
+        # this run was queued.
+        run: git reset --hard ${{ github.sha }}
+
+      - name: Setup | Install uv
         uses: astral-sh/setup-uv@v7
 
-      - name: Check tag matches pyproject.toml version
-        run: |
-          version="$(uv version --short)"
-          tag="${GITHUB_REF_NAME#v}"
-          if [ "$version" != "$tag" ]; then
-            echo "Tag v$tag does not match pyproject.toml version $version" >&2
-            exit 1
-          fi
-
-      - name: Install dependencies
+      - name: Setup | Install dependencies
         run: uv sync
 
-      - name: Run checks (lint, format, types, tests)
+      - name: Check | Lint, format, types, tests
+        # Gate the release on the same hooks that run pre-commit locally: a
+        # failure here stops the release before anything is tagged.
         run: uv run pre-commit run --all-files
 
-      - name: Build sdist and wheel
-        run: uv build
+      - name: Release | Bump the version, commit, tag and release
+        id: release
+        uses: python-semantic-release/python-semantic-release@v10
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          git_committer_name: github-actions
+          git_committer_email: actions@users.noreply.github.com
 
-      - name: Create GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "$GITHUB_REF_NAME" dist/* \
-            --title "$GITHUB_REF_NAME" \
-            --generate-notes
+      - name: Release | Upload the sdist and wheel to the release
+        # Skipped when the push had nothing releasable in it.
+        if: steps.release.outputs.released == 'true'
+        uses: python-semantic-release/publish-action@v10
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ steps.release.outputs.tag }}
