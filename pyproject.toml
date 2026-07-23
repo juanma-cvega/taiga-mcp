@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "taiga-mcp"
-version = "1.1.0"
+version = "1.2.0"
 description = "MCP server exposing Taiga project management — projects, epics, stories, tasks, and sprints — as tools for MCP clients like Claude Code"
 readme = "README.md"
 requires-python = ">=3.14"

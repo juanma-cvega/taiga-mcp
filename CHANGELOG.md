@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.2.0 (2026-07-23)
+
+### Continuous Integration
+
+- Stop attaching assets to the release; embrace immutable releases
+  ([`d060d99`](https://github.com/juanma-cvega/taiga-mcp/commit/d060d998d4d9936b72f2c1660bdd9a59e4133e34))
+
+### Features
+
+- Add tools to read and write comments on stories, epics and tasks
+  ([`337e939`](https://github.com/juanma-cvega/taiga-mcp/commit/337e9394dc5eef395768328b71da0f4b33dca78e))
+
+
 ## v1.1.0 (2026-07-17)
 
 ### Bug Fixes
