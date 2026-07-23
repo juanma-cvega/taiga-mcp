@@ -1,9 +1,9 @@
 import asyncio
-from typing import Awaitable, Callable
+from typing import Awaitable, Callable, NamedTuple
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx
-from taiga_mcp.models import Project, Sprint, UserStory, Task, Epic
+from taiga_mcp.models import Comment, Project, Sprint, UserStory, Task, Epic
 
 
 def _build_payload(fields: dict) -> dict:
@@ -43,6 +43,37 @@ def _raise_for_taiga_error(response: httpx.Response) -> None:
         raise RuntimeError(
             f"Taiga API error {response.status_code}: {response.text}"
         ) from exc
+
+
+class _CommentTarget(NamedTuple):
+    """Where a commentable type lives in the API.
+
+    Taiga has no comment endpoint of its own: writing a comment is a versioned
+    PATCH on the item itself, and reading them means walking the item's history
+    feed — which is keyed by a singular name that differs from the collection
+    endpoint (/userstories vs /history/userstory).
+    """
+
+    endpoint: str
+    model: type
+    history: str
+
+
+_COMMENT_TARGETS: dict[str, _CommentTarget] = {
+    "story": _CommentTarget("/userstories", UserStory, "userstory"),
+    "epic": _CommentTarget("/epics", Epic, "epic"),
+    "task": _CommentTarget("/tasks", Task, "task"),
+}
+
+
+def _comment_target(item_type: str) -> _CommentTarget:
+    try:
+        return _COMMENT_TARGETS[item_type]
+    except KeyError:
+        valid = ", ".join(_COMMENT_TARGETS)
+        raise ValueError(
+            f"Unknown item type '{item_type}'. Valid types: {valid}"
+        ) from None
 
 
 class TaigaClient:
@@ -393,6 +424,60 @@ class TaigaClient:
             is_blocked=is_blocked,
             blocked_note=blocked_note,
         )
+
+    async def add_comment(
+        self, item_type: str, item_id: int, comment: str
+    ) -> UserStory | Epic | Task:
+        """Add a comment to an existing story, epic or task.
+
+        Taiga models comments as a write on the item, so this is a versioned
+        PATCH carrying only `comment` — no other field is touched.
+        """
+        target = _comment_target(item_type)
+        if not comment.strip():
+            raise ValueError("comment must not be empty")
+        path = f"{target.endpoint}/{item_id}"
+        current = await self._get_one(path)
+        payload = {
+            "version": _require_field(current, "version", item_type, item_id),
+            "comment": comment,
+        }
+        return target.model(**await self._patch(path, payload))
+
+    async def add_comment_by_ref(
+        self, item_type: str, project_id: int, ref: int, comment: str
+    ) -> UserStory | Epic | Task:
+        item_id = await self._resolve_ref(item_type, project_id, ref)
+        return await self.add_comment(item_type, item_id, comment)
+
+    async def list_comments(self, item_type: str, item_id: int) -> list[Comment]:
+        """Read the comments on a story, epic or task, oldest first."""
+        target = _comment_target(item_type)
+        entries = await self._get(f"/history/{target.history}/{item_id}")
+        # The history feed interleaves comments with field-change records, and
+        # keeps tombstones for comments deleted in the UI (the text is retained
+        # but delete_comment_date is set). Keep only live comments.
+        comments = [
+            Comment(**entry)
+            for entry in entries
+            if entry.get("comment") and not entry.get("delete_comment_date")
+        ]
+        # Taiga returns history newest-first; a thread reads oldest-first.
+        return sorted(comments, key=lambda c: c.created_at or "")
+
+    async def list_comments_by_ref(
+        self, item_type: str, project_id: int, ref: int
+    ) -> list[Comment]:
+        item_id = await self._resolve_ref(item_type, project_id, ref)
+        return await self.list_comments(item_type, item_id)
+
+    async def _resolve_ref(self, item_type: str, project_id: int, ref: int) -> int:
+        """Resolve a per-project #ref to the item's internal id."""
+        target = _comment_target(item_type)
+        current = await self._get_one(
+            f"{target.endpoint}/by_ref", params={"project": project_id, "ref": ref}
+        )
+        return _require_field(current, "id", item_type, f"#{ref}")
 
     async def _send(self, method: str, url: str, **kwargs) -> httpx.Response:
         """Issue a request, transparently re-authenticating once on a 401.

@@ -77,6 +77,26 @@ class Task(BaseModel):
         return None
 
 
+class Comment(BaseModel):
+    """One comment from an item's history feed.
+
+    `user` is Taiga's actor blob ({pk, name, username, ...}); `edit_comment_date`
+    is set when a comment was edited after posting.
+    """
+
+    comment: str
+    id: str | None = None
+    created_at: str | None = None
+    user: dict | None = None
+    edit_comment_date: str | None = None
+
+    @property
+    def author(self) -> str:
+        if self.user:
+            return self.user.get("name") or self.user.get("username") or "unknown"
+        return "unknown"
+
+
 class Epic(BaseModel):
     id: int
     ref: int

@@ -3,6 +3,7 @@ import pytest
 import respx
 import httpx
 from taiga_mcp.client import TaigaClient, _build_payload
+from taiga_mcp.models import Epic, Task
 
 TAIGA_URL = "https://api.taiga.io/api/v1"
 TOKEN = "test-token"
@@ -943,3 +944,233 @@ async def test_move_story_to_backlog_raises_readable_error_on_missing_version():
     with pytest.raises(RuntimeError) as exc:
         await client.move_story_to_backlog(2)
     assert "version" in str(exc.value)
+
+
+@respx.mock
+async def test_add_comment_patches_only_the_comment_with_version():
+    respx.get(f"{TAIGA_URL}/userstories/2").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": 2,
+                "ref": 9,
+                "subject": "Story A",
+                "project": 10,
+                "description": "original",
+                "version": 6,
+            },
+        )
+    )
+    route = respx.patch(f"{TAIGA_URL}/userstories/2").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": 2,
+                "ref": 9,
+                "subject": "Story A",
+                "project": 10,
+                "description": "original",
+                "status_extra_info": {"name": "New"},
+            },
+        )
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    story = await client.add_comment("story", 2, "Looks good to me")
+    body = json.loads(route.calls.last.request.content)
+    # Only the comment travels: a comment must not overwrite any other field.
+    assert body == {"version": 6, "comment": "Looks good to me"}
+    assert story.subject == "Story A"
+
+
+@respx.mock
+async def test_add_comment_on_epic_uses_epic_endpoint():
+    respx.get(f"{TAIGA_URL}/epics/1").mock(
+        return_value=httpx.Response(
+            200,
+            json={"id": 1, "ref": 5, "subject": "Epic A", "project": 10, "version": 3},
+        )
+    )
+    route = respx.patch(f"{TAIGA_URL}/epics/1").mock(
+        return_value=httpx.Response(
+            200, json={"id": 1, "ref": 5, "subject": "Epic A", "project": 10}
+        )
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    epic = await client.add_comment("epic", 1, "Scoped for Q3")
+    assert json.loads(route.calls.last.request.content)["comment"] == "Scoped for Q3"
+    assert isinstance(epic, Epic)
+
+
+@respx.mock
+async def test_add_comment_on_task_uses_task_endpoint():
+    respx.get(f"{TAIGA_URL}/tasks/20").mock(
+        return_value=httpx.Response(
+            200,
+            json={"id": 20, "ref": 7, "subject": "Task A", "project": 10, "version": 2},
+        )
+    )
+    route = respx.patch(f"{TAIGA_URL}/tasks/20").mock(
+        return_value=httpx.Response(
+            200, json={"id": 20, "ref": 7, "subject": "Task A", "project": 10}
+        )
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    task = await client.add_comment("task", 20, "Blocked on infra")
+    assert json.loads(route.calls.last.request.content)["version"] == 2
+    assert isinstance(task, Task)
+
+
+@respx.mock
+async def test_add_comment_rejects_unknown_item_type():
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    with pytest.raises(ValueError) as exc:
+        await client.add_comment("sprint", 10, "Nope")
+    assert "story" in str(exc.value)
+
+
+@respx.mock
+async def test_add_comment_rejects_empty_comment_without_calling_taiga():
+    route = respx.patch(f"{TAIGA_URL}/userstories/2")
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    with pytest.raises(ValueError):
+        await client.add_comment("story", 2, "   ")
+    assert not route.called
+
+
+@respx.mock
+async def test_add_comment_raises_readable_error_on_missing_version():
+    respx.get(f"{TAIGA_URL}/userstories/2").mock(
+        return_value=httpx.Response(
+            200, json={"id": 2, "ref": 9, "subject": "Story A", "project": 10}
+        )
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    with pytest.raises(RuntimeError) as exc:
+        await client.add_comment("story", 2, "Hello")
+    assert "version" in str(exc.value)
+
+
+@respx.mock
+async def test_add_comment_by_ref_resolves_ref_then_comments():
+    respx.get(f"{TAIGA_URL}/userstories/by_ref").mock(
+        return_value=httpx.Response(
+            200,
+            json={"id": 2, "ref": 9, "subject": "Story A", "project": 10, "version": 6},
+        )
+    )
+    respx.get(f"{TAIGA_URL}/userstories/2").mock(
+        return_value=httpx.Response(
+            200,
+            json={"id": 2, "ref": 9, "subject": "Story A", "project": 10, "version": 6},
+        )
+    )
+    route = respx.patch(f"{TAIGA_URL}/userstories/2").mock(
+        return_value=httpx.Response(
+            200, json={"id": 2, "ref": 9, "subject": "Story A", "project": 10}
+        )
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    await client.add_comment_by_ref("story", project_id=10, ref=9, comment="Done")
+    assert json.loads(route.calls.last.request.content) == {
+        "version": 6,
+        "comment": "Done",
+    }
+
+
+def _history_comment(uid, text, created_at, **extra):
+    return {
+        "id": uid,
+        "comment": text,
+        "created_at": created_at,
+        "user": {"pk": 1, "name": "Jane Doe", "username": "jane"},
+        **extra,
+    }
+
+
+@respx.mock
+async def test_list_comments_keeps_only_comment_entries():
+    respx.get(f"{TAIGA_URL}/history/userstory/2").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                _history_comment("a", "Second", "2026-07-02T10:00:00Z"),
+                # A plain field change carries no comment text.
+                {
+                    "id": "b",
+                    "comment": "",
+                    "created_at": "2026-07-01T12:00:00Z",
+                    "values_diff": {"status": ["New", "In progress"]},
+                },
+                _history_comment("c", "First", "2026-07-01T09:00:00Z"),
+            ],
+        )
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    comments = await client.list_comments("story", 2)
+    # Oldest first, field changes dropped.
+    assert [c.comment for c in comments] == ["First", "Second"]
+    assert comments[0].author == "Jane Doe"
+
+
+@respx.mock
+async def test_list_comments_drops_deleted_comments():
+    respx.get(f"{TAIGA_URL}/history/userstory/2").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                _history_comment("a", "Kept", "2026-07-01T09:00:00Z"),
+                # Taiga keeps the text of a deleted comment and stamps it; it
+                # must not resurface here.
+                _history_comment(
+                    "b",
+                    "Deleted in the UI",
+                    "2026-07-02T09:00:00Z",
+                    delete_comment_date="2026-07-03T09:00:00Z",
+                ),
+            ],
+        )
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    comments = await client.list_comments("story", 2)
+    assert [c.comment for c in comments] == ["Kept"]
+
+
+@respx.mock
+async def test_list_comments_uses_singular_history_path_per_type():
+    for item_type, path in (
+        ("story", "userstory"),
+        ("epic", "epic"),
+        ("task", "task"),
+    ):
+        route = respx.get(f"{TAIGA_URL}/history/{path}/3").mock(
+            return_value=httpx.Response(200, json=[])
+        )
+        client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+        assert await client.list_comments(item_type, 3) == []
+        assert route.called
+
+
+@respx.mock
+async def test_list_comments_rejects_unknown_item_type():
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    with pytest.raises(ValueError) as exc:
+        await client.list_comments("sprint", 10)
+    assert "story" in str(exc.value)
+
+
+@respx.mock
+async def test_list_comments_by_ref_resolves_ref_then_reads_history():
+    respx.get(f"{TAIGA_URL}/epics/by_ref").mock(
+        return_value=httpx.Response(
+            200, json={"id": 1, "ref": 5, "subject": "Epic A", "project": 10}
+        )
+    )
+    route = respx.get(f"{TAIGA_URL}/history/epic/1").mock(
+        return_value=httpx.Response(
+            200, json=[_history_comment("a", "Scoped", "2026-07-01T09:00:00Z")]
+        )
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    comments = await client.list_comments_by_ref("epic", project_id=10, ref=5)
+    assert route.called
+    assert [c.comment for c in comments] == ["Scoped"]

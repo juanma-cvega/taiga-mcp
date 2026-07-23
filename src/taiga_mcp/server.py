@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 from taiga_mcp.auth import authenticate
 from taiga_mcp.client import TaigaClient
-from taiga_mcp.models import Epic, Sprint, Task
+from taiga_mcp.models import Comment, Epic, Sprint, Task
 
 load_dotenv()
 
@@ -85,6 +85,19 @@ def _format_detail(item) -> str:
         )
     lines.append(f"Description:\n{item.description or '—'}")
     return "\n".join(lines)
+
+
+def _format_comments(comments: list[Comment]) -> str:
+    if not comments:
+        return "No comments found."
+
+    def block(comment: Comment) -> str:
+        header = f"[{comment.created_at or 'unknown date'}] {comment.author}"
+        if comment.edit_comment_date:
+            header += " (edited)"
+        return f"{header}:\n{comment.comment}"
+
+    return "\n\n".join(block(c) for c in comments)
 
 
 def _format_sprint(sprint: Sprint) -> str:
@@ -487,6 +500,67 @@ async def update_story_by_ref(
         blocked_note=blocked_note,
     )
     return _with_link(f"Updated #{story.ref} {story.subject} [{story.status}]", story)
+
+
+@mcp.tool()
+async def add_comment(item_type: str, item_id: int, comment: str) -> str:
+    """
+    Add a comment to an existing Taiga user story, epic or task. The comment is
+    appended to the item's activity timeline; no other field is changed.
+
+    Args:
+        item_type: What is being commented on — 'story', 'epic' or 'task'.
+        item_id: Numeric Taiga ID of that item (not its #ref).
+        comment: Comment body (required, non-empty). Markdown is supported.
+    """
+    item = await _get_client().add_comment(item_type, item_id, comment)
+    return _with_link(f"Commented on #{item.ref} {item.subject}", item)
+
+
+@mcp.tool()
+async def add_comment_by_ref(
+    item_type: str, project_id: int, ref: int, comment: str
+) -> str:
+    """
+    Add a comment to a Taiga user story, epic or task addressed by its
+    per-project #ref (the number shown in the Taiga UI), not its internal id.
+
+    Args:
+        item_type: What is being commented on — 'story', 'epic' or 'task'.
+        project_id: Numeric Taiga project ID.
+        ref: The item's #ref within that project.
+        comment: Comment body (required, non-empty). Markdown is supported.
+    """
+    item = await _get_client().add_comment_by_ref(item_type, project_id, ref, comment)
+    return _with_link(f"Commented on #{item.ref} {item.subject}", item)
+
+
+@mcp.tool()
+async def list_comments(item_type: str, item_id: int) -> str:
+    """
+    Read the comments on a Taiga user story, epic or task, oldest first.
+    Comments deleted in the Taiga UI are not shown.
+
+    Args:
+        item_type: What to read comments from — 'story', 'epic' or 'task'.
+        item_id: Numeric Taiga ID of that item (not its #ref).
+    """
+    return _format_comments(await _get_client().list_comments(item_type, item_id))
+
+
+@mcp.tool()
+async def list_comments_by_ref(item_type: str, project_id: int, ref: int) -> str:
+    """
+    Read the comments on a Taiga user story, epic or task addressed by its
+    per-project #ref (the number shown in the Taiga UI), not its internal id.
+
+    Args:
+        item_type: What to read comments from — 'story', 'epic' or 'task'.
+        project_id: Numeric Taiga project ID.
+        ref: The item's #ref within that project.
+    """
+    comments = await _get_client().list_comments_by_ref(item_type, project_id, ref)
+    return _format_comments(comments)
 
 
 @mcp.tool()

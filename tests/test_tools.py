@@ -4,7 +4,7 @@ import httpx
 from unittest.mock import AsyncMock
 from taiga_mcp import server
 from taiga_mcp.client import TaigaClient
-from taiga_mcp.models import Project, Sprint, UserStory, Task, Epic
+from taiga_mcp.models import Comment, Project, Sprint, UserStory, Task, Epic
 
 TAIGA_URL = "https://api.taiga.io/api/v1"
 
@@ -667,3 +667,80 @@ async def test_get_current_sprint_returns_link(mock_client, ui_base):
     mock_client.list_sprints.return_value = [_sprint()]
     result = await server.get_current_sprint(project_id=1)
     assert "Link: https://tree.taiga.io/project/my-project/taskboard/sprint-1" in result
+
+
+async def test_add_comment_passes_through_and_confirms(mock_client):
+    mock_client.add_comment.return_value = UserStory(
+        id=2,
+        ref=9,
+        subject="Story A",
+        project=10,
+        status_extra_info={"name": "New"},
+    )
+    result = await server.add_comment(item_type="story", item_id=2, comment="LGTM")
+    mock_client.add_comment.assert_called_once_with("story", 2, "LGTM")
+    assert "#9 Story A" in result
+    assert "Commented" in result
+
+
+async def test_add_comment_returns_link(mock_client, ui_base):
+    mock_client.add_comment.return_value = Task(
+        id=20,
+        ref=7,
+        subject="Task A",
+        project=10,
+        project_extra_info={"slug": "my-project"},
+        status_extra_info={"name": "New"},
+    )
+    result = await server.add_comment(item_type="task", item_id=20, comment="On it")
+    assert "Link: https://tree.taiga.io/project/my-project/task/7" in result
+
+
+async def test_add_comment_by_ref_passes_through(mock_client):
+    mock_client.add_comment_by_ref.return_value = Epic(
+        id=1,
+        ref=5,
+        subject="Epic A",
+        project=10,
+        status_extra_info={"name": "New"},
+    )
+    result = await server.add_comment_by_ref(
+        item_type="epic", project_id=10, ref=5, comment="Scoped"
+    )
+    mock_client.add_comment_by_ref.assert_called_once_with("epic", 10, 5, "Scoped")
+    assert "#5 Epic A" in result
+
+
+async def test_list_comments_formats_thread(mock_client):
+    mock_client.list_comments.return_value = [
+        Comment(
+            comment="LGTM",
+            created_at="2026-07-01T09:00:00Z",
+            user={"name": "Jane Doe"},
+        ),
+        Comment(
+            comment="Shipped",
+            created_at="2026-07-02T09:00:00Z",
+            user={"name": "Sam Lee"},
+            edit_comment_date="2026-07-02T10:00:00Z",
+        ),
+    ]
+    result = await server.list_comments(item_type="story", item_id=2)
+    mock_client.list_comments.assert_called_once_with("story", 2)
+    assert "Jane Doe" in result
+    assert "LGTM" in result
+    assert "2026-07-01T09:00:00Z" in result
+    assert "(edited)" in result
+
+
+async def test_list_comments_empty(mock_client):
+    mock_client.list_comments.return_value = []
+    result = await server.list_comments(item_type="task", item_id=20)
+    assert "No comments found" in result
+
+
+async def test_list_comments_by_ref_passes_through(mock_client):
+    mock_client.list_comments_by_ref.return_value = [Comment(comment="Scoped")]
+    result = await server.list_comments_by_ref(item_type="epic", project_id=10, ref=5)
+    mock_client.list_comments_by_ref.assert_called_once_with("epic", 10, 5)
+    assert "Scoped" in result

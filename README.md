@@ -85,6 +85,10 @@ claude mcp add taiga -- uv run --directory /path/to/taiga-mcp taiga-mcp
 | `update_story` | `story_id`, + any field to change | Update a story. `None` leaves a field unchanged; `''` clears it. |
 | `update_epic_by_ref` | `project_id`, `ref`, + any field to change | Update an epic by its per-project `#ref`. |
 | `update_story_by_ref` | `project_id`, `ref`, + any field to change | Update a story by its per-project `#ref`. |
+| `add_comment` | `item_type` (`story`/`epic`/`task`), `item_id`, `comment` | Add a comment to an existing item. No other field is touched. |
+| `add_comment_by_ref` | `item_type`, `project_id`, `ref`, `comment` | Add a comment to an item addressed by its per-project `#ref`. |
+| `list_comments` | `item_type` (`story`/`epic`/`task`), `item_id` | Read an item's comments, oldest first. Comments deleted in the UI are omitted. |
+| `list_comments_by_ref` | `item_type`, `project_id`, `ref` | Read the comments on an item addressed by its per-project `#ref`. |
 
 The list tools show both the `#ref` (the identifier a human sees in the Taiga
 UI) and the numeric `id`. The `id` tools (`get_epic`, `update_story`, …) take

@@ -135,6 +135,47 @@ async def write_lifecycle(pid: int) -> None:
     print(result)
     assert "Link:" in result, "update_story output is missing the UI link"
 
+    print("\n== add_comment (story, by id) ==")
+    result = await server.add_comment(
+        item_type="story", item_id=story.id, comment="Commented by smoke_test.py"
+    )
+    print(result)
+    # Only the real API proves a `comment` PATCH is accepted and does not
+    # clobber the rest of the item.
+    assert "Link:" in result, "add_comment output is missing the UI link"
+    unchanged = await client.get_story(story.id)
+    assert unchanged.description == "Updated by smoke_test.py", (
+        "add_comment overwrote the story description"
+    )
+
+    print("\n== list_comments (story) ==")
+    result = await server.list_comments(item_type="story", item_id=story.id)
+    print(result)
+    # Proves the history feed really carries the comment we just wrote, and
+    # that the field names this parses (comment, created_at, user) are real.
+    assert "Commented by smoke_test.py" in result, (
+        "list_comments did not return the comment just added"
+    )
+
+    print("\n== add_comment_by_ref (epic) ==")
+    print(
+        await server.add_comment_by_ref(
+            item_type="epic",
+            project_id=pid,
+            ref=epic.ref,
+            comment="Commented by ref from smoke_test.py",
+        )
+    )
+
+    print("\n== list_comments_by_ref (epic) ==")
+    result = await server.list_comments_by_ref(
+        item_type="epic", project_id=pid, ref=epic.ref
+    )
+    print(result)
+    assert "Commented by ref from smoke_test.py" in result, (
+        "list_comments_by_ref did not return the comment just added"
+    )
+
     await sprint_lifecycle(pid, story.id, stamp)
 
 
