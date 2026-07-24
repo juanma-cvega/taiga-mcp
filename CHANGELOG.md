@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.3.0 (2026-07-24)
+
+### Features
+
+- Add tool to reorder backlog stories for prioritisation
+  ([`6d66a6e`](https://github.com/juanma-cvega/taiga-mcp/commit/6d66a6e07acbbc5103174bdfc31c4a2725176cba))
+
+
 ## v1.2.0 (2026-07-23)
 
 ### Continuous Integration
