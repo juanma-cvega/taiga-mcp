@@ -947,6 +947,77 @@ async def test_move_story_to_backlog_raises_readable_error_on_missing_version():
 
 
 @respx.mock
+async def test_reorder_backlog_posts_project_and_ordered_ids():
+    route = respx.post(f"{TAIGA_URL}/userstories/bulk_update_backlog_order").mock(
+        return_value=httpx.Response(200, json={"3": 1, "1": 2, "2": 3})
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    result = await client.reorder_backlog(project_id=10, story_ids=[3, 1, 2])
+    body = json.loads(route.calls.last.request.content)
+    assert body == {"project_id": 10, "bulk_userstories": [3, 1, 2]}
+    # No anchor keys travel when none is requested.
+    assert "after_userstory_id" not in body
+    assert "before_userstory_id" not in body
+    assert result == {"3": 1, "1": 2, "2": 3}
+
+
+@respx.mock
+async def test_reorder_backlog_sends_after_anchor():
+    route = respx.post(f"{TAIGA_URL}/userstories/bulk_update_backlog_order").mock(
+        return_value=httpx.Response(200, json={})
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    await client.reorder_backlog(project_id=10, story_ids=[3], after_story_id=7)
+    body = json.loads(route.calls.last.request.content)
+    assert body["after_userstory_id"] == 7
+    assert "before_userstory_id" not in body
+
+
+@respx.mock
+async def test_reorder_backlog_sends_before_anchor():
+    route = respx.post(f"{TAIGA_URL}/userstories/bulk_update_backlog_order").mock(
+        return_value=httpx.Response(200, json={})
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    await client.reorder_backlog(project_id=10, story_ids=[3], before_story_id=7)
+    body = json.loads(route.calls.last.request.content)
+    assert body["before_userstory_id"] == 7
+    assert "after_userstory_id" not in body
+
+
+@respx.mock
+async def test_reorder_backlog_rejects_both_anchors_without_calling_taiga():
+    route = respx.post(f"{TAIGA_URL}/userstories/bulk_update_backlog_order")
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    with pytest.raises(ValueError):
+        await client.reorder_backlog(
+            project_id=10, story_ids=[3], after_story_id=7, before_story_id=8
+        )
+    assert not route.called
+
+
+@respx.mock
+async def test_reorder_backlog_rejects_empty_ids_without_calling_taiga():
+    route = respx.post(f"{TAIGA_URL}/userstories/bulk_update_backlog_order")
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    with pytest.raises(ValueError):
+        await client.reorder_backlog(project_id=10, story_ids=[])
+    assert not route.called
+
+
+@respx.mock
+async def test_reorder_backlog_raises_readable_error_on_http_failure():
+    respx.post(f"{TAIGA_URL}/userstories/bulk_update_backlog_order").mock(
+        return_value=httpx.Response(400, json={"_error_message": "not in project"})
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    with pytest.raises(RuntimeError) as exc:
+        await client.reorder_backlog(project_id=10, story_ids=[3])
+    assert "400" in str(exc.value)
+    assert "not in project" in str(exc.value)
+
+
+@respx.mock
 async def test_add_comment_patches_only_the_comment_with_version():
     respx.get(f"{TAIGA_URL}/userstories/2").mock(
         return_value=httpx.Response(

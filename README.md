@@ -75,6 +75,7 @@ claude mcp add taiga -- uv run --directory /path/to/taiga-mcp taiga-mcp
 | `close_sprint` | `sprint_id` | Close a sprint. |
 | `delete_sprint` | `sprint_id` | Delete a sprint permanently. Its stories are **not** deleted — Taiga returns them to the backlog. |
 | `move_story_to_backlog` | `story_id` | Move a story out of its sprint and back to the backlog. |
+| `reorder_backlog_stories` | `project_id`, `story_ids`, + optional `after_story_id`, `before_story_id` | Reprioritise the backlog: move `story_ids` (in the given order) to the top, or immediately `after`/`before` an anchor story. |
 | `create_epic` | `project_id`, `subject`, + optional `description`, `status`, `assigned_to`, `tags`, `is_blocked`, `blocked_note`, `color` | Create an epic. `status` is a status name. |
 | `create_story` | `project_id`, `subject`, + optional `description`, `status`, `sprint_id`, `epic_id`, `assigned_to`, `tags`, `is_blocked`, `blocked_note` | Create a story, optionally linked to an epic. |
 | `get_epic` | `epic_id` | Get a single epic by id with its full field set. |

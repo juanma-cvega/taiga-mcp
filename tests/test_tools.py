@@ -744,3 +744,35 @@ async def test_list_comments_by_ref_passes_through(mock_client):
     result = await server.list_comments_by_ref(item_type="epic", project_id=10, ref=5)
     mock_client.list_comments_by_ref.assert_called_once_with("epic", 10, 5)
     assert "Scoped" in result
+
+
+async def test_reorder_backlog_stories_passes_through_and_confirms(mock_client):
+    mock_client.reorder_backlog.return_value = {}
+    result = await server.reorder_backlog_stories(project_id=10, story_ids=[3, 1, 2])
+    mock_client.reorder_backlog.assert_called_once_with(
+        project_id=10, story_ids=[3, 1, 2], after_story_id=None, before_story_id=None
+    )
+    assert "top of the backlog" in result
+    assert "3 → 1 → 2" in result
+
+
+async def test_reorder_backlog_stories_reports_after_anchor(mock_client):
+    mock_client.reorder_backlog.return_value = {}
+    result = await server.reorder_backlog_stories(
+        project_id=10, story_ids=[3], after_story_id=7
+    )
+    mock_client.reorder_backlog.assert_called_once_with(
+        project_id=10, story_ids=[3], after_story_id=7, before_story_id=None
+    )
+    assert "after story 7" in result
+
+
+async def test_reorder_backlog_stories_reports_before_anchor(mock_client):
+    mock_client.reorder_backlog.return_value = {}
+    result = await server.reorder_backlog_stories(
+        project_id=10, story_ids=[3], before_story_id=7
+    )
+    mock_client.reorder_backlog.assert_called_once_with(
+        project_id=10, story_ids=[3], after_story_id=None, before_story_id=7
+    )
+    assert "before story 7" in result

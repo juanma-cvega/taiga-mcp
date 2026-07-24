@@ -176,6 +176,12 @@ async def write_lifecycle(pid: int) -> None:
         "list_comments_by_ref did not return the comment just added"
     )
 
+    print("\n== reorder_backlog_stories (move story to the top of the backlog) ==")
+    # The story is still in the backlog here, so reordering it is valid. Only
+    # the real API proves the bulk_update_backlog_order payload shape is right.
+    result = await server.reorder_backlog_stories(project_id=pid, story_ids=[story.id])
+    print(result)
+
     await sprint_lifecycle(pid, story.id, stamp)
 
 

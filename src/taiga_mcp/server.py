@@ -708,6 +708,51 @@ async def move_story_to_backlog(story_id: int) -> str:
     return _with_link(f"Moved #{story.ref} {story.subject} to the backlog", story)
 
 
+@mcp.tool()
+async def reorder_backlog_stories(
+    project_id: int,
+    story_ids: list[int],
+    after_story_id: int | None = None,
+    before_story_id: int | None = None,
+) -> str:
+    """
+    Reorder user stories in a project's backlog to reprioritise them.
+
+    The stories in `story_ids` are moved to sit together, in the exact order
+    given, at a position set by the optional anchor:
+
+      - after_story_id set  → placed immediately after that story.
+      - before_story_id set → placed immediately before that story.
+      - neither set          → placed at the top of the backlog (highest
+        priority).
+
+    Stories not listed keep their relative order and shift to make room. Pass
+    at most one of after_story_id / before_story_id. All ids are numeric story
+    IDs (not #refs).
+
+    Args:
+        project_id: Numeric Taiga project ID.
+        story_ids: Story IDs in the desired top-to-bottom order.
+        after_story_id: Optional anchor — place the group right after this story.
+        before_story_id: Optional anchor — place the group right before this
+            story.
+    """
+    await _get_client().reorder_backlog(
+        project_id=project_id,
+        story_ids=story_ids,
+        after_story_id=after_story_id,
+        before_story_id=before_story_id,
+    )
+    order = " → ".join(str(sid) for sid in story_ids)
+    if after_story_id is not None:
+        where = f"after story {after_story_id}"
+    elif before_story_id is not None:
+        where = f"before story {before_story_id}"
+    else:
+        where = "at the top of the backlog"
+    return f"Reordered {len(story_ids)} story(ies) {where}: {order}"
+
+
 def main() -> None:
     asyncio.run(init())
     mcp.run(transport="stdio")

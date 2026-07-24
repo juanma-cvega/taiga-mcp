@@ -177,6 +177,36 @@ class TaigaClient:
         }
         return UserStory(**await self._patch(f"/userstories/{story_id}", payload))
 
+    async def reorder_backlog(
+        self,
+        project_id: int,
+        story_ids: list[int],
+        after_story_id: int | None = None,
+        before_story_id: int | None = None,
+    ) -> dict:
+        """Reposition backlog stories in bulk to reprioritise them.
+
+        The stories in `story_ids` are placed together, in the given order,
+        at a spot decided by the optional anchor: immediately after
+        `after_story_id`, immediately before `before_story_id`, or — when
+        neither is given — at the top of the backlog. Other stories keep their
+        relative order and shift to make room.
+
+        Returns Taiga's map of the story ids to their new order values.
+        """
+        if not story_ids:
+            raise ValueError("story_ids must not be empty")
+        if after_story_id is not None and before_story_id is not None:
+            raise ValueError(
+                "Pass only one of after_story_id / before_story_id, not both"
+            )
+        payload: dict = {"project_id": project_id, "bulk_userstories": story_ids}
+        if after_story_id is not None:
+            payload["after_userstory_id"] = after_story_id
+        if before_story_id is not None:
+            payload["before_userstory_id"] = before_story_id
+        return await self._post("/userstories/bulk_update_backlog_order", payload)
+
     async def list_user_stories(
         self,
         project_id: int,
