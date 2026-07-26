@@ -9,8 +9,11 @@
 # commit over lint, formatting or types. That matters most for the dependency
 # bumps this exists to vet: a bumped library breaks mypy long before it breaks
 # a test. Pushes to main are already covered by the release workflow running
-# the identical gate, so this stays pull-request only.
-name: CI
+# the identical gate, so this stays pull-request only -- which is what the name
+# says, rather than claiming to be the whole of CI. The live smoke test is
+# deliberately not here: it needs Taiga credentials, and a same-repo PR branch
+# can read repository secrets. It gates the release instead; see release.yml.
+name: Pull Request
 
 on:
   pull_request:
