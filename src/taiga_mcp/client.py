@@ -5,7 +5,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
-from taiga_mcp.models import Comment, Epic, Project, Sprint, Task, UserStory
+from taiga_mcp.models import Comment, Epic, Issue, Project, Sprint, Task, UserStory
 
 
 def _build_payload(fields: dict) -> dict:
@@ -77,6 +77,7 @@ _COMMENT_TARGETS: dict[str, _CommentTarget] = {
     "story": _CommentTarget("/userstories", UserStory, "userstory"),
     "epic": _CommentTarget("/epics", Epic, "epic"),
     "task": _CommentTarget("/tasks", Task, "task"),
+    "issue": _CommentTarget("/issues", Issue, "issue"),
 }
 
 
@@ -246,6 +247,23 @@ class TaigaClient:
         data = await self._get("/tasks", params=params)
         return [Task(**item) for item in data]
 
+    async def list_issues(
+        self,
+        project_id: int,
+        sprint_id: int | None = None,
+        status: str | None = None,
+        assigned_to: int | None = None,
+    ) -> list[Issue]:
+        params: dict = {"project": project_id}
+        if sprint_id is not None:
+            params["milestone"] = sprint_id
+        if status is not None:
+            params["status__is_closed"] = "false" if status == "open" else "true"
+        if assigned_to is not None:
+            params["assigned_to"] = assigned_to
+        data = await self._get("/issues", params=params)
+        return [Issue(**item) for item in data]
+
     async def list_epics(self, project_id: int) -> list[Epic]:
         data = await self._get("/epics", params={"project": project_id})
         return [Epic(**item) for item in data]
@@ -255,6 +273,15 @@ class TaigaClient:
 
     async def get_story(self, story_id: int) -> UserStory:
         return UserStory(**await self._get_one(f"/userstories/{story_id}"))
+
+    async def get_issue(self, issue_id: int) -> Issue:
+        return Issue(**await self._get_one(f"/issues/{issue_id}"))
+
+    async def get_issue_by_ref(self, project_id: int, ref: int) -> Issue:
+        data = await self._get_one(
+            "/issues/by_ref", params={"project": project_id, "ref": ref}
+        )
+        return Issue(**data)
 
     async def get_epic_by_ref(self, project_id: int, ref: int) -> Epic:
         data = await self._get_one(
@@ -333,6 +360,145 @@ class TaigaClient:
         if epic_id is not None:
             await self._link_story_to_epic(story, epic_id, "created")
         return story
+
+    async def _resolve_issue_catalogues(
+        self,
+        project_id: int,
+        status: str | None,
+        issue_type: str | None,
+        priority: str | None,
+        severity: str | None,
+    ) -> dict:
+        """Resolve an issue's four name-valued fields to this project's ids.
+
+        Taiga scopes all four catalogues per project, so the same name maps to
+        different ids in different projects and none of them can be sent as a
+        name. Only the ones actually being set are looked up -- each costs a
+        request.
+        """
+        catalogues = {
+            "status": (status, "/issue-statuses"),
+            "type": (issue_type, "/issue-types"),
+            "priority": (priority, "/priorities"),
+            "severity": (severity, "/severities"),
+        }
+        return {
+            field: await self._resolve_status(endpoint, project_id, name, field)
+            for field, (name, endpoint) in catalogues.items()
+            if name is not None
+        }
+
+    async def create_issue(
+        self,
+        project_id: int,
+        subject: str,
+        description: str | None = None,
+        status: str | None = None,
+        issue_type: str | None = None,
+        priority: str | None = None,
+        severity: str | None = None,
+        sprint_id: int | None = None,
+        assigned_to: int | None = None,
+        tags: list | None = None,
+        is_blocked: bool | None = None,
+        blocked_note: str | None = None,
+    ) -> Issue:
+        payload: dict = {"project": project_id, "subject": subject}
+        payload.update(
+            await self._resolve_issue_catalogues(
+                project_id, status, issue_type, priority, severity
+            )
+        )
+        payload.update(
+            _build_payload(
+                {
+                    "description": description,
+                    "milestone": sprint_id,
+                    "assigned_to": assigned_to,
+                    "tags": tags,
+                    "is_blocked": is_blocked,
+                    "blocked_note": blocked_note,
+                }
+            )
+        )
+        return Issue(**await self._post("/issues", payload))
+
+    async def update_issue(
+        self,
+        issue_id: int,
+        subject: str | None = None,
+        description: str | None = None,
+        status: str | None = None,
+        issue_type: str | None = None,
+        priority: str | None = None,
+        severity: str | None = None,
+        sprint_id: int | None = None,
+        assigned_to: int | None = None,
+        tags: list | None = None,
+        is_blocked: bool | None = None,
+        blocked_note: str | None = None,
+    ) -> Issue:
+        current = await self._get_one(f"/issues/{issue_id}")
+        payload = {"version": _require_field(current, "version", "issue", issue_id)}
+        if any(v is not None for v in (status, issue_type, priority, severity)):
+            project_id = _require_field(current, "project", "issue", issue_id)
+            payload.update(
+                await self._resolve_issue_catalogues(
+                    project_id, status, issue_type, priority, severity
+                )
+            )
+        payload.update(
+            _build_payload(
+                {
+                    "subject": subject,
+                    "description": description,
+                    "milestone": sprint_id,
+                    "assigned_to": assigned_to,
+                    "tags": tags,
+                    "is_blocked": is_blocked,
+                    "blocked_note": blocked_note,
+                }
+            )
+        )
+        return Issue(**await self._patch(f"/issues/{issue_id}", payload))
+
+    async def update_issue_by_ref(
+        self,
+        project_id: int,
+        ref: int,
+        subject: str | None = None,
+        description: str | None = None,
+        status: str | None = None,
+        issue_type: str | None = None,
+        priority: str | None = None,
+        severity: str | None = None,
+        sprint_id: int | None = None,
+        assigned_to: int | None = None,
+        tags: list | None = None,
+        is_blocked: bool | None = None,
+        blocked_note: str | None = None,
+    ) -> Issue:
+        current = await self._get_one(
+            "/issues/by_ref", params={"project": project_id, "ref": ref}
+        )
+        issue_id = _require_field(current, "id", "issue", f"#{ref}")
+        return await self.update_issue(
+            issue_id,
+            subject=subject,
+            description=description,
+            status=status,
+            issue_type=issue_type,
+            priority=priority,
+            severity=severity,
+            sprint_id=sprint_id,
+            assigned_to=assigned_to,
+            tags=tags,
+            is_blocked=is_blocked,
+            blocked_note=blocked_note,
+        )
+
+    async def delete_issue(self, issue_id: int) -> None:
+        await self._delete(f"/issues/{issue_id}")
 
     async def _link_story_to_epic(
         self, story: UserStory, epic_id: int, action: str
@@ -489,8 +655,8 @@ class TaigaClient:
 
     async def add_comment(
         self, item_type: str, item_id: int, comment: str
-    ) -> UserStory | Epic | Task:
-        """Add a comment to an existing story, epic or task.
+    ) -> UserStory | Epic | Task | Issue:
+        """Add a comment to an existing story, epic, task or issue.
 
         Taiga models comments as a write on the item, so this is a versioned
         PATCH carrying only `comment` — no other field is touched.
@@ -508,12 +674,12 @@ class TaigaClient:
 
     async def add_comment_by_ref(
         self, item_type: str, project_id: int, ref: int, comment: str
-    ) -> UserStory | Epic | Task:
+    ) -> UserStory | Epic | Task | Issue:
         item_id = await self._resolve_ref(item_type, project_id, ref)
         return await self.add_comment(item_type, item_id, comment)
 
     async def list_comments(self, item_type: str, item_id: int) -> list[Comment]:
-        """Read the comments on a story, epic or task, oldest first."""
+        """Read the comments on a story, epic, task or issue, oldest first."""
         target = _comment_target(item_type)
         entries = await self._get(f"/history/{target.history}/{item_id}")
         # The history feed interleaves comments with field-change records, and
@@ -575,14 +741,22 @@ class TaigaClient:
         _raise_for_taiga_error(response)
 
     async def _resolve_status(
-        self, status_endpoint: str, project_id: int, name: str
+        self, status_endpoint: str, project_id: int, name: str, label: str = "status"
     ) -> int:
+        """Resolve a per-project catalogue entry's name to its id.
+
+        Every catalogue Taiga scopes to a project -- statuses, but also issue
+        types, priorities and severities -- is a list of {id, name}, so one
+        lookup serves them all. `label` only names the thing in the error, so
+        an agent that guesses "Critical" for a severity is told which values
+        the project actually defines rather than being told about statuses.
+        """
         statuses = await self._get(status_endpoint, params={"project": project_id})
         for status in statuses:
             if status["name"] == name:
                 return status["id"]
         valid = ", ".join(s["name"] for s in statuses)
-        raise ValueError(f"Unknown status '{name}'. Valid statuses: {valid}")
+        raise ValueError(f"Unknown {label} '{name}'. Valid {label}s: {valid}")
 
     async def _get(self, path: str, params: dict | None = None) -> list:
         results: list = []

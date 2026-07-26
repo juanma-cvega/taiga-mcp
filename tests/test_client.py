@@ -1342,3 +1342,230 @@ async def test_list_comments_by_ref_resolves_ref_then_reads_history():
     comments = await client.list_comments_by_ref("epic", project_id=10, ref=5)
     assert route.called
     assert [c.comment for c in comments] == ["Scoped"]
+
+
+@respx.mock
+async def test_list_issues_passes_filters_to_taiga():
+    route = respx.get(f"{TAIGA_URL}/issues").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    await client.list_issues(project_id=10, sprint_id=7, status="open", assigned_to=42)
+    params = route.calls.last.request.url.params
+    assert params["project"] == "10"
+    assert params["milestone"] == "7"
+    assert params["status__is_closed"] == "false"
+    assert params["assigned_to"] == "42"
+
+
+@respx.mock
+async def test_list_issues_closed_filter_inverts_is_closed():
+    route = respx.get(f"{TAIGA_URL}/issues").mock(
+        return_value=httpx.Response(200, json=[])
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    await client.list_issues(project_id=10, status="closed")
+    assert route.calls.last.request.url.params["status__is_closed"] == "true"
+
+
+@respx.mock
+async def test_get_issue_by_ref_queries_by_ref_endpoint():
+    route = respx.get(f"{TAIGA_URL}/issues/by_ref").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": 3,
+                "ref": 12,
+                "subject": "Login times out",
+                "project": 10,
+                "status_extra_info": {"name": "New"},
+            },
+        )
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    issue = await client.get_issue_by_ref(10, 12)
+    params = route.calls.last.request.url.params
+    assert (params["project"], params["ref"]) == ("10", "12")
+    assert issue.id == 3
+
+
+@respx.mock
+async def test_create_issue_resolves_every_catalogue_name_to_an_id():
+    respx.get(f"{TAIGA_URL}/issue-statuses").mock(
+        return_value=httpx.Response(200, json=[{"id": 1, "name": "New"}])
+    )
+    respx.get(f"{TAIGA_URL}/issue-types").mock(
+        return_value=httpx.Response(200, json=[{"id": 2, "name": "Bug"}])
+    )
+    respx.get(f"{TAIGA_URL}/priorities").mock(
+        return_value=httpx.Response(200, json=[{"id": 3, "name": "High"}])
+    )
+    respx.get(f"{TAIGA_URL}/severities").mock(
+        return_value=httpx.Response(200, json=[{"id": 4, "name": "Normal"}])
+    )
+    route = respx.post(f"{TAIGA_URL}/issues").mock(
+        return_value=httpx.Response(
+            201,
+            json={"id": 3, "ref": 12, "subject": "Login times out", "project": 10},
+        )
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    await client.create_issue(
+        project_id=10,
+        subject="Login times out",
+        status="New",
+        issue_type="Bug",
+        priority="High",
+        severity="Normal",
+        sprint_id=7,
+    )
+    body = json.loads(route.calls.last.request.content)
+    assert body["project"] == 10
+    assert body["subject"] == "Login times out"
+    # Names resolved to this project's ids; `issue_type` writes Taiga's `type`.
+    assert (body["status"], body["type"]) == (1, 2)
+    assert (body["priority"], body["severity"]) == (3, 4)
+    assert body["milestone"] == 7  # sprint_id maps to milestone
+    assert "description" not in body  # None omitted
+
+
+@respx.mock
+async def test_create_issue_skips_catalogue_lookups_when_names_absent():
+    statuses = respx.get(f"{TAIGA_URL}/issue-statuses").mock(
+        return_value=httpx.Response(200, json=[{"id": 1, "name": "New"}])
+    )
+    types = respx.get(f"{TAIGA_URL}/issue-types").mock(
+        return_value=httpx.Response(200, json=[{"id": 2, "name": "Bug"}])
+    )
+    route = respx.post(f"{TAIGA_URL}/issues").mock(
+        return_value=httpx.Response(
+            201, json={"id": 3, "ref": 12, "subject": "X", "project": 10}
+        )
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    await client.create_issue(project_id=10, subject="X")
+    body = json.loads(route.calls.last.request.content)
+    # Each catalogue costs a request; none is fetched when nothing needs it.
+    assert not statuses.called and not types.called
+    assert "status" not in body and "type" not in body
+
+
+@respx.mock
+async def test_create_issue_unknown_type_lists_the_projects_types():
+    respx.get(f"{TAIGA_URL}/issue-types").mock(
+        return_value=httpx.Response(
+            200, json=[{"id": 1, "name": "Bug"}, {"id": 2, "name": "Question"}]
+        )
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    with pytest.raises(ValueError) as exc:
+        await client.create_issue(project_id=10, subject="X", issue_type="Nope")
+    message = str(exc.value)
+    # Names the field that was wrong, not "status", and shows the real values.
+    assert "type" in message and "Bug" in message and "Question" in message
+
+
+@respx.mock
+async def test_update_issue_sends_version_and_only_given_fields():
+    respx.get(f"{TAIGA_URL}/issues/3").mock(
+        return_value=httpx.Response(
+            200, json={"id": 3, "ref": 12, "subject": "X", "project": 10, "version": 9}
+        )
+    )
+    route = respx.patch(f"{TAIGA_URL}/issues/3").mock(
+        return_value=httpx.Response(
+            200, json={"id": 3, "ref": 12, "subject": "Y", "project": 10}
+        )
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    await client.update_issue(3, subject="Y")
+    body = json.loads(route.calls.last.request.content)
+    assert body == {"version": 9, "subject": "Y"}
+
+
+@respx.mock
+async def test_update_issue_reads_project_only_to_resolve_a_catalogue():
+    respx.get(f"{TAIGA_URL}/issues/3").mock(
+        return_value=httpx.Response(
+            200, json={"id": 3, "ref": 12, "subject": "X", "project": 10, "version": 9}
+        )
+    )
+    severities = respx.get(f"{TAIGA_URL}/severities").mock(
+        return_value=httpx.Response(200, json=[{"id": 5, "name": "Critical"}])
+    )
+    route = respx.patch(f"{TAIGA_URL}/issues/3").mock(
+        return_value=httpx.Response(
+            200, json={"id": 3, "ref": 12, "subject": "X", "project": 10}
+        )
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    await client.update_issue(3, severity="Critical")
+    assert severities.called
+    body = json.loads(route.calls.last.request.content)
+    assert body["severity"] == 5
+
+
+@respx.mock
+async def test_update_issue_by_ref_resolves_ref_then_patches_by_id():
+    respx.get(f"{TAIGA_URL}/issues/by_ref").mock(
+        return_value=httpx.Response(
+            200, json={"id": 3, "ref": 12, "subject": "X", "project": 10, "version": 9}
+        )
+    )
+    respx.get(f"{TAIGA_URL}/issues/3").mock(
+        return_value=httpx.Response(
+            200, json={"id": 3, "ref": 12, "subject": "X", "project": 10, "version": 9}
+        )
+    )
+    route = respx.patch(f"{TAIGA_URL}/issues/3").mock(
+        return_value=httpx.Response(
+            200, json={"id": 3, "ref": 12, "subject": "Y", "project": 10}
+        )
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    issue = await client.update_issue_by_ref(10, 12, subject="Y")
+    assert route.called
+    assert issue.subject == "Y"
+
+
+@respx.mock
+async def test_add_comment_accepts_issues():
+    respx.get(f"{TAIGA_URL}/issues/3").mock(
+        return_value=httpx.Response(
+            200, json={"id": 3, "ref": 12, "subject": "X", "project": 10, "version": 9}
+        )
+    )
+    route = respx.patch(f"{TAIGA_URL}/issues/3").mock(
+        return_value=httpx.Response(
+            200, json={"id": 3, "ref": 12, "subject": "X", "project": 10}
+        )
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    await client.add_comment("issue", 3, "Reproduced on staging")
+    body = json.loads(route.calls.last.request.content)
+    assert body == {"version": 9, "comment": "Reproduced on staging"}
+
+
+@respx.mock
+async def test_list_comments_reads_the_issue_history_feed():
+    route = respx.get(f"{TAIGA_URL}/history/issue/3").mock(
+        return_value=httpx.Response(
+            200,
+            json=[
+                {"comment": "second", "created_at": "2026-01-02", "id": "b"},
+                {"comment": "first", "created_at": "2026-01-01", "id": "a"},
+            ],
+        )
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    comments = await client.list_comments("issue", 3)
+    assert route.called
+    assert [c.comment for c in comments] == ["first", "second"]
+
+
+@respx.mock
+async def test_delete_issue_calls_the_issue_endpoint():
+    route = respx.delete(f"{TAIGA_URL}/issues/3").mock(return_value=httpx.Response(204))
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    await client.delete_issue(3)
+    assert route.called
