@@ -1,6 +1,7 @@
+import httpx
 import pytest
 import respx
-import httpx
+
 from taiga_mcp.auth import authenticate
 
 TAIGA_URL = "https://api.taiga.io/api/v1"
