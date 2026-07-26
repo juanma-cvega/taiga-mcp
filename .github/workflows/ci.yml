@@ -1,0 +1,48 @@
+# Runs on every pull request, Dependabot's included, as a NON-BLOCKING signal.
+# The `main` ruleset lists no required status checks, so a red run here never
+# stops a merge -- it only tells the reviewer whether the change breaks
+# anything. Making it blocking is a ruleset change, not a change to this file:
+# add this job's name to a required_status_checks rule.
+#
+# It runs the same gate as the release rather than pytest alone, so a green
+# check here means the release job will not turn around and fail on the same
+# commit over lint, formatting or types. That matters most for the dependency
+# bumps this exists to vet: a bumped library breaks mypy long before it breaks
+# a test. Pushes to main are already covered by the release workflow running
+# the identical gate, so this stays pull-request only.
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+# One run per pull request: a force-push supersedes the run it interrupted.
+# Unlike the release workflow there is nothing here to leave half-finished.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Lint, format, types, tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setup | Check out the pull request
+        uses: actions/checkout@v4
+
+      - name: Setup | Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Setup | Install dependencies
+        # Not `--locked`: uv.lock's own recorded version trails pyproject.toml
+        # between releases by design, and this must not fail over that. The
+        # release re-locks and commits it; see [tool.semantic_release].
+        run: uv sync
+
+      - name: Check | Lint, format, types, tests
+        run: uv run pre-commit run --all-files
