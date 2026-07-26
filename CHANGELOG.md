@@ -2,6 +2,47 @@
 
 <!-- version list -->
 
+## v1.4.1 (2026-07-26)
+
+### Bug Fixes
+
+- **deps**: Update mcp[cli] requirement from >=1.27.2 to >=1.28.1
+  ([#8](https://github.com/juanma-cvega/taiga-mcp/pull/8),
+  [`d2c8ea4`](https://github.com/juanma-cvega/taiga-mcp/commit/d2c8ea496dd384c774b4705cf9cacc0a1951c413))
+
+### Chores
+
+- Use a neutral sample project in test fixtures
+  ([#9](https://github.com/juanma-cvega/taiga-mcp/pull/9),
+  [`1496d75`](https://github.com/juanma-cvega/taiga-mcp/commit/1496d7501cad0f72981f19de4ba7d0448f56b0c3))
+
+### Continuous Integration
+
+- Add a Dependabot configuration for uv and GitHub Actions
+  ([#4](https://github.com/juanma-cvega/taiga-mcp/pull/4),
+  [`4975ea3`](https://github.com/juanma-cvega/taiga-mcp/commit/4975ea355a2ca9dbb5264321a6a7500de1ae0583))
+
+- Fix Dependabot prefixes so runtime bumps release and dev bumps don't
+  ([#10](https://github.com/juanma-cvega/taiga-mcp/pull/10),
+  [`df98056`](https://github.com/juanma-cvega/taiga-mcp/commit/df98056e357fedb6279650b9680f0ab1cee7884b))
+
+- Mint the release token with client-id, not the deprecated app-id
+  ([#5](https://github.com/juanma-cvega/taiga-mcp/pull/5),
+  [`226c2a2`](https://github.com/juanma-cvega/taiga-mcp/commit/226c2a2b73987666c18f4b7903118a87b6850b9b))
+
+- Release runtime dependency bumps, not dev or workflow ones
+  ([#10](https://github.com/juanma-cvega/taiga-mcp/pull/10),
+  [`df98056`](https://github.com/juanma-cvega/taiga-mcp/commit/df98056e357fedb6279650b9680f0ab1cee7884b))
+
+- Run the release gate on pull requests as a non-blocking check
+  ([#11](https://github.com/juanma-cvega/taiga-mcp/pull/11),
+  [`31035c0`](https://github.com/juanma-cvega/taiga-mcp/commit/31035c0820c60f9b4a8aa18ebf436515e1a86869))
+
+- Stop doubling the Dependabot scope and isolate action majors
+  ([#10](https://github.com/juanma-cvega/taiga-mcp/pull/10),
+  [`df98056`](https://github.com/juanma-cvega/taiga-mcp/commit/df98056e357fedb6279650b9680f0ab1cee7884b))
+
+
 ## v1.4.0 (2026-07-26)
 
 ### Chores
