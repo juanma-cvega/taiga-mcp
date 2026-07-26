@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.4.2 (2026-07-26)
+
+### Bug Fixes
+
+- Satisfy ruff 0.16's wider default rules ([#12](https://github.com/juanma-cvega/taiga-mcp/pull/12),
+  [`7b1e8ab`](https://github.com/juanma-cvega/taiga-mcp/commit/7b1e8ab50714cacf53bb526e7b922dbc0d8e0842))
+
+
 ## v1.4.1 (2026-07-26)
 
 ### Bug Fixes
