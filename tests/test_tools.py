@@ -336,6 +336,30 @@ async def test_update_story_returns_updated_status(mock_client):
     assert "In progress" in result
 
 
+async def test_update_story_passes_epic_id_through(mock_client):
+    mock_client.update_story.return_value = UserStory(
+        id=2,
+        ref=9,
+        subject="Story A",
+        project=10,
+        status_extra_info={"name": "New"},
+    )
+    await server.update_story(story_id=2, epic_id=5)
+    assert mock_client.update_story.call_args.kwargs["epic_id"] == 5
+
+
+async def test_update_story_by_ref_passes_epic_id_through(mock_client):
+    mock_client.update_story_by_ref.return_value = UserStory(
+        id=2,
+        ref=9,
+        subject="Story A",
+        project=10,
+        status_extra_info={"name": "New"},
+    )
+    await server.update_story_by_ref(project_id=10, ref=9, epic_id=5)
+    assert mock_client.update_story_by_ref.call_args.kwargs["epic_id"] == 5
+
+
 def test_derive_ui_base_maps_taiga_cloud_api_host_to_ui_host():
     assert (
         server._derive_ui_base("https://api.taiga.io/api/v1") == "https://tree.taiga.io"

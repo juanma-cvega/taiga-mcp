@@ -135,6 +135,21 @@ async def write_lifecycle(pid: int) -> None:
     print(result)
     assert "Link:" in result, "update_story output is missing the UI link"
 
+    print("\n== update_story: attach the story to a second epic ==")
+    other_epic = await client.create_epic(
+        project_id=pid,
+        subject=f"[smoke {stamp}] epic (attach target)",
+    )
+    print(await server.update_story(story_id=story.id, epic_id=other_epic.id))
+    # Attaching twice must be a no-op: Taiga 400s on a duplicate link, and only
+    # the real API proves the story's `epics` field is shaped as the skip reads
+    # it — and that attaching adds to the epics a story is in, never replaces.
+    print(await server.update_story(story_id=story.id, epic_id=other_epic.id))
+    linked = {item["id"] for item in (await client.get_story(story.id)).epics or []}
+    assert linked == {epic.id, other_epic.id}, (
+        f"story is in epics {linked}, expected both {epic.id} and {other_epic.id}"
+    )
+
     print("\n== add_comment (story, by id) ==")
     result = await server.add_comment(
         item_type="story", item_id=story.id, comment="Commented by smoke_test.py"

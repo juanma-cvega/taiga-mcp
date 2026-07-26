@@ -83,9 +83,9 @@ claude mcp add taiga -- uv run --directory /path/to/taiga-mcp taiga-mcp
 | `get_epic_by_ref` | `project_id`, `ref` | Get a single epic by its per-project `#ref` (the number shown in the Taiga UI). |
 | `get_story_by_ref` | `project_id`, `ref` | Get a single story by its per-project `#ref`. |
 | `update_epic` | `epic_id`, + any field to change | Update an epic. `None` leaves a field unchanged; `''` clears it. |
-| `update_story` | `story_id`, + any field to change | Update a story. `None` leaves a field unchanged; `''` clears it. |
+| `update_story` | `story_id`, + any field to change | Update a story. `None` leaves a field unchanged; `''` clears it. `epic_id` attaches it to an epic (added alongside any epic it is already in). |
 | `update_epic_by_ref` | `project_id`, `ref`, + any field to change | Update an epic by its per-project `#ref`. |
-| `update_story_by_ref` | `project_id`, `ref`, + any field to change | Update a story by its per-project `#ref`. |
+| `update_story_by_ref` | `project_id`, `ref`, + any field to change | Update a story by its per-project `#ref`. Accepts `epic_id` like `update_story`. |
 | `add_comment` | `item_type` (`story`/`epic`/`task`), `item_id`, `comment` | Add a comment to an existing item. No other field is touched. |
 | `add_comment_by_ref` | `item_type`, `project_id`, `ref`, `comment` | Add a comment to an item addressed by its per-project `#ref`. |
 | `list_comments` | `item_type` (`story`/`epic`/`task`), `item_id` | Read an item's comments, oldest first. Comments deleted in the UI are omitted. |
