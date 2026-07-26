@@ -82,3 +82,20 @@ jobs:
           # promote or delete behaviour. Points at a throwaway project.
           TAIGA_SMOKE_PROJECT_SLUG: ${{ secrets.TAIGA_SMOKE_PROJECT_SLUG }}
         run: uv run python scripts/smoke_test.py
+
+      - name: Cleanup | Remove anything the run left behind
+        # `always()`, because this matters precisely when the step above did
+        # not finish: the smoke test tears itself down inline, so a failed,
+        # timed-out or cancelled run abandons whatever it had created. Nobody
+        # is watching a CI run to clean up after it, and the debris would
+        # accumulate until it fouled a later run's assertions.
+        #
+        # Runs after a success too, where it is a no-op that also serves as a
+        # check the teardown really was complete.
+        if: always()
+        env:
+          TAIGA_SMOKE_URL: ${{ secrets.TAIGA_SMOKE_URL }}
+          TAIGA_SMOKE_USERNAME: ${{ secrets.TAIGA_SMOKE_USERNAME }}
+          TAIGA_SMOKE_PASSWORD: ${{ secrets.TAIGA_SMOKE_PASSWORD }}
+          TAIGA_SMOKE_PROJECT_SLUG: ${{ secrets.TAIGA_SMOKE_PROJECT_SLUG }}
+        run: uv run python scripts/smoke_cleanup.py
