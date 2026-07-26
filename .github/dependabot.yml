@@ -19,12 +19,16 @@ updates:
       - "dependencies"
       - "python"
     commit-message:
-      # `chore(deps)` is deliberate, not cosmetic: python-semantic-release
-      # parses every commit that lands on main, and chore: releases nothing. A
+      # `chore` is deliberate, not cosmetic: python-semantic-release parses
+      # every commit that lands on main, and chore: releases nothing. A
       # dependency bump therefore rides along in the next feat:/fix: release
       # instead of cutting a version of its own. Using fix: here would tag a
       # patch release per merged bump. See [tool.semantic_release].
-      prefix: "chore(deps)"
+      #
+      # The scope comes from `include`, not from the prefix: Dependabot appends
+      # its own -- (deps) for runtime, (deps-dev) for the dev group -- so a
+      # prefix of "chore(deps)" here produced titles reading chore(deps)(deps).
+      prefix: "chore"
       include: "scope"
     groups:
       # Grouped so a quiet week is one PR, not six. Only minor and patch are
@@ -74,8 +78,16 @@ updates:
       - "dependencies"
       - "github-actions"
     commit-message:
+      # No `include: scope` here, so this prefix keeps its own scope: bumps
+      # read chore(ci): rather than chore(ci)(deps):.
       prefix: "chore(ci)"
     groups:
+      # Same rule as the Python groups: minor and patch batch together, majors
+      # come alone. An action's major bump can change its inputs or its runner
+      # -- actions/checkout 4 -> 7 is not a bump to skim inside a batch.
       github-actions:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
