@@ -380,6 +380,7 @@ async def update_story(
     description: str | None = None,
     status: str | None = None,
     sprint_id: int | None = None,
+    epic_id: int | None = None,
     assigned_to: int | None = None,
     tags: list | None = None,
     is_blocked: bool | None = None,
@@ -395,6 +396,9 @@ async def update_story(
         description: New body text ('' clears it).
         status: New status NAME (resolved to the project's status id).
         sprint_id: Sprint (milestone) id.
+        epic_id: Epic id to attach the story to (a story can be in several
+            epics, so this adds a link rather than replacing the existing
+            ones; attaching to an epic it is already in does nothing).
         assigned_to: Numeric user id.
         tags: List of tags.
         is_blocked: Blocked flag.
@@ -406,6 +410,7 @@ async def update_story(
         description=description,
         status=status,
         sprint_id=sprint_id,
+        epic_id=epic_id,
         assigned_to=assigned_to,
         tags=tags,
         is_blocked=is_blocked,
@@ -466,6 +471,7 @@ async def update_story_by_ref(
     description: str | None = None,
     status: str | None = None,
     sprint_id: int | None = None,
+    epic_id: int | None = None,
     assigned_to: int | None = None,
     tags: list | None = None,
     is_blocked: bool | None = None,
@@ -482,6 +488,9 @@ async def update_story_by_ref(
         description: New body text ('' clears it).
         status: New status NAME (resolved to the project's status id).
         sprint_id: Sprint (milestone) id.
+        epic_id: Epic id to attach the story to (a story can be in several
+            epics, so this adds a link rather than replacing the existing
+            ones; attaching to an epic it is already in does nothing).
         assigned_to: Numeric user id.
         tags: List of tags.
         is_blocked: Blocked flag.
@@ -494,6 +503,7 @@ async def update_story_by_ref(
         description=description,
         status=status,
         sprint_id=sprint_id,
+        epic_id=epic_id,
         assigned_to=assigned_to,
         tags=tags,
         is_blocked=is_blocked,

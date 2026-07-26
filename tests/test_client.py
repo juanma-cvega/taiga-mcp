@@ -783,6 +783,101 @@ async def test_update_story_maps_sprint_and_sends_version():
     assert body["version"] == 6
     assert body["milestone"] == 99
     assert "status" not in body
+    assert "epic" not in body
+
+
+def _mock_story_2(epics: list | None = None) -> None:
+    """Mock the GET/PATCH pair update_story makes for story id 2."""
+    current = {
+        "id": 2,
+        "ref": 9,
+        "subject": "Story A",
+        "project": 10,
+        "version": 6,
+        "status_extra_info": {"name": "New"},
+    }
+    if epics is not None:
+        current["epics"] = epics
+    respx.get(f"{TAIGA_URL}/userstories/2").mock(
+        return_value=httpx.Response(200, json=current)
+    )
+    respx.patch(f"{TAIGA_URL}/userstories/2").mock(
+        return_value=httpx.Response(200, json=current)
+    )
+
+
+@respx.mock
+async def test_update_story_links_epic_when_epic_id_given():
+    _mock_story_2()
+    link = respx.post(f"{TAIGA_URL}/epics/5/related_userstories").mock(
+        return_value=httpx.Response(201, json={"epic": 5, "user_story": 2})
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    await client.update_story(2, epic_id=5)
+    assert link.called
+    assert json.loads(link.calls.last.request.content) == {
+        "epic": 5,
+        "user_story": 2,
+    }
+
+
+@respx.mock
+async def test_update_story_skips_epic_link_when_already_in_that_epic():
+    _mock_story_2(epics=[{"id": 5, "subject": "Epic A"}])
+    link = respx.post(f"{TAIGA_URL}/epics/5/related_userstories").mock(
+        return_value=httpx.Response(400, json={"_error_message": "already linked"})
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    await client.update_story(2, epic_id=5)
+    assert not link.called
+
+
+@respx.mock
+async def test_update_story_links_epic_when_in_a_different_epic():
+    _mock_story_2(epics=[{"id": 7, "subject": "Epic B"}])
+    link = respx.post(f"{TAIGA_URL}/epics/5/related_userstories").mock(
+        return_value=httpx.Response(201, json={"epic": 5, "user_story": 2})
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    await client.update_story(2, epic_id=5)
+    assert link.called
+
+
+@respx.mock
+async def test_update_story_epic_link_failure_includes_story_and_epic_context():
+    _mock_story_2()
+    respx.post(f"{TAIGA_URL}/epics/5/related_userstories").mock(
+        return_value=httpx.Response(400, json={"_error_message": "epic not found"})
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    with pytest.raises(RuntimeError) as exc:
+        await client.update_story(2, subject="Renamed", epic_id=5)
+    assert "#9" in str(exc.value)
+    assert "updated" in str(exc.value)
+    assert "epic 5" in str(exc.value)
+
+
+@respx.mock
+async def test_update_story_by_ref_forwards_epic_id():
+    respx.get(f"{TAIGA_URL}/userstories/by_ref").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": 2,
+                "ref": 9,
+                "project": 10,
+                "version": 6,
+                "status_extra_info": {"name": "New"},
+            },
+        )
+    )
+    _mock_story_2()
+    link = respx.post(f"{TAIGA_URL}/epics/5/related_userstories").mock(
+        return_value=httpx.Response(201, json={"epic": 5, "user_story": 2})
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    await client.update_story_by_ref(project_id=10, ref=9, epic_id=5)
+    assert link.called
 
 
 SPRINT_JSON = {

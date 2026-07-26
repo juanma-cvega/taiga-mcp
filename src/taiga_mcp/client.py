@@ -29,6 +29,18 @@ def _require_field(current: dict, field: str, kind: str, item_id: int | str) -> 
         ) from None
 
 
+def _is_in_epic(current: dict, epic_id: int) -> bool:
+    """Whether a story payload already lists the given epic among its links.
+
+    Taiga rejects a duplicate link with a 400, so re-attaching a story to the
+    epic it is already in has to be a no-op.
+    """
+    return any(
+        isinstance(epic, dict) and epic.get("id") == epic_id
+        for epic in current.get("epics") or []
+    )
+
+
 def _raise_for_taiga_error(response: httpx.Response) -> None:
     """Raise a RuntimeError with the Taiga response body on HTTP failure.
 
@@ -317,17 +329,29 @@ class TaigaClient:
         )
         story = UserStory(**await self._post("/userstories", payload))
         if epic_id is not None:
-            try:
-                await self._post(
-                    f"/epics/{epic_id}/related_userstories",
-                    {"epic": epic_id, "user_story": story.id},
-                )
-            except Exception as exc:
-                raise RuntimeError(
-                    f"Story #{story.ref} (id {story.id}) created but linking "
-                    f"to epic {epic_id} failed: {exc}"
-                ) from exc
+            await self._link_story_to_epic(story, epic_id, "created")
         return story
+
+    async def _link_story_to_epic(
+        self, story: UserStory, epic_id: int, action: str
+    ) -> None:
+        """Attach a story to an epic.
+
+        Taiga keeps this relation outside the story payload, so it can only be
+        written through the epic's related-stories endpoint — never as a field
+        on the story itself. `action` names what already succeeded, so a
+        failure here says which half of the operation went through.
+        """
+        try:
+            await self._post(
+                f"/epics/{epic_id}/related_userstories",
+                {"epic": epic_id, "user_story": story.id},
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                f"Story #{story.ref} (id {story.id}) {action} but linking "
+                f"to epic {epic_id} failed: {exc}"
+            ) from exc
 
     async def update_epic(
         self,
@@ -370,6 +394,7 @@ class TaigaClient:
         description: str | None = None,
         status: str | None = None,
         sprint_id: int | None = None,
+        epic_id: int | None = None,
         assigned_to: int | None = None,
         tags: list | None = None,
         is_blocked: bool | None = None,
@@ -395,7 +420,10 @@ class TaigaClient:
                 }
             )
         )
-        return UserStory(**await self._patch(f"/userstories/{story_id}", payload))
+        story = UserStory(**await self._patch(f"/userstories/{story_id}", payload))
+        if epic_id is not None and not _is_in_epic(current, epic_id):
+            await self._link_story_to_epic(story, epic_id, "updated")
+        return story
 
     async def update_epic_by_ref(
         self,
@@ -434,6 +462,7 @@ class TaigaClient:
         description: str | None = None,
         status: str | None = None,
         sprint_id: int | None = None,
+        epic_id: int | None = None,
         assigned_to: int | None = None,
         tags: list | None = None,
         is_blocked: bool | None = None,
@@ -449,6 +478,7 @@ class TaigaClient:
             description=description,
             status=status,
             sprint_id=sprint_id,
+            epic_id=epic_id,
             assigned_to=assigned_to,
             tags=tags,
             is_blocked=is_blocked,
