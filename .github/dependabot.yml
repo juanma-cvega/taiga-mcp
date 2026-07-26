@@ -19,12 +19,20 @@ updates:
       - "dependencies"
       - "python"
     commit-message:
-      # `chore(deps)` is deliberate, not cosmetic: python-semantic-release
-      # parses every commit that lands on main, and chore: releases nothing. A
-      # dependency bump therefore rides along in the next feat:/fix: release
-      # instead of cutting a version of its own. Using fix: here would tag a
-      # patch release per merged bump. See [tool.semantic_release].
-      prefix: "chore(deps)"
+      # The split here decides what ships. python-semantic-release parses every
+      # commit that lands on main: fix: cuts a patch release, chore: releases
+      # nothing. Runtime dependencies are part of what this server *is* -- an
+      # httpx or mcp bump changes the installed behaviour -- so they release.
+      # The dev toolchain does not ship, so mypy and ruff bumps must not tag a
+      # version. `prefix-development` is what tells the two apart; it is
+      # supported by the uv ecosystem, and Dependabot already classifies the
+      # PEP 735 dev group as development (its PRs carry the deps-dev scope).
+      #
+      # The scope comes from `include`, not from the prefix: Dependabot appends
+      # its own -- (deps) for runtime, (deps-dev) for the dev group -- so a
+      # prefix of "chore(deps)" here produced titles reading chore(deps)(deps).
+      prefix: "fix" # -> fix(deps):      patch release
+      prefix-development: "chore" # -> chore(deps-dev): no release
       include: "scope"
     groups:
       # Grouped so a quiet week is one PR, not six. Only minor and patch are
@@ -52,7 +60,12 @@ updates:
           - "patch"
       # Catch-all for anything added later that nobody remembered to slot into
       # the groups above; without it a new dependency silently gets its own PR
-      # every week.
+      # every week. Slot new dependencies into the right group anyway: this one
+      # can mix a runtime and a dev dependency into one pull request, which
+      # then takes a single prefix, and a runtime bump landing under chore:
+      # ships without a release. Grouping by dependency-type instead of by
+      # pattern would rule that out, but `dependency-type` is not among the
+      # group options the uv ecosystem supports.
       other-python:
         patterns:
           - "*"
@@ -74,8 +87,16 @@ updates:
       - "dependencies"
       - "github-actions"
     commit-message:
+      # No `include: scope` here, so this prefix keeps its own scope: bumps
+      # read chore(ci): rather than chore(ci)(deps):.
       prefix: "chore(ci)"
     groups:
+      # Same rule as the Python groups: minor and patch batch together, majors
+      # come alone. An action's major bump can change its inputs or its runner
+      # -- actions/checkout 4 -> 7 is not a bump to skim inside a batch.
       github-actions:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
