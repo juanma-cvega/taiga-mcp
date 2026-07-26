@@ -57,10 +57,15 @@ jobs:
         # A dedicated App is, so we push as the App. Scoped to contents:write
         # only -- deliberately no `workflows` write, so a release can never
         # rewrite the pipeline that mints its own credentials.
+        #
+        # `client-id`, not the deprecated `app-id`: they are different values --
+        # the client id is the Iv23li... string on the App's settings page, not
+        # the numeric App ID. The numeric one is still what the ruleset's bypass
+        # entry matches on, so the two are not interchangeable anywhere.
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
-          app-id: ${{ secrets.RELEASE_APP_ID }}
+          client-id: ${{ secrets.RELEASE_APP_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
 
       - name: Setup | Check out the release branch
