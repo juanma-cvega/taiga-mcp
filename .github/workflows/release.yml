@@ -9,6 +9,11 @@
 # only -- see the note on immutable releases below for why nothing is attached).
 # Never bump the version by hand -- the commit history is the source of truth.
 # Settings live in [tool.semantic_release] in pyproject.toml.
+#
+# main is protected by a ruleset (PRs required, verified signatures, linear
+# history), so the release commit is pushed as a dedicated GitHub App that sits
+# on that ruleset's bypass list. Its credentials are confined to the `release`
+# environment; see the note on the job below.
 name: Release
 
 on:
@@ -30,10 +35,34 @@ jobs:
       group: ${{ github.workflow }}-release-${{ github.ref_name }}
       cancel-in-progress: false
 
+    # The App credentials live ONLY in this environment, whose deployment
+    # branch policy allows main exclusively. A workflow added or altered in a
+    # pull request runs from the PR ref and is denied the environment, so it
+    # cannot borrow the App token to push to main. The secret, not the workflow
+    # logic, is the security boundary. This also means a workflow_dispatch from
+    # any other branch fails at the token step rather than releasing.
+    environment: release
+
+    # Least privilege: the workflow token only reads. Every write below goes
+    # through the App token, which is what the ruleset bypass is granted to.
     permissions:
-      contents: write # push the release commit and tag, create the release
+      contents: read
 
     steps:
+      - name: Setup | Mint a token for the release App
+        # The `main` ruleset requires pull requests and verified signatures, so
+        # the release commit -- pushed straight to main, unsigned -- is rejected
+        # for any actor not on the bypass list. GITHUB_TOKEN cannot be on it:
+        # bypasses are granted to repository roles and Apps, and it is neither.
+        # A dedicated App is, so we push as the App. Scoped to contents:write
+        # only -- deliberately no `workflows` write, so a release can never
+        # rewrite the pipeline that mints its own credentials.
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
       - name: Setup | Check out the release branch
         uses: actions/checkout@v4
         with:
@@ -41,6 +70,12 @@ jobs:
           # The action does not unshallow, and semantic-release needs the full
           # history plus tags to find the last release and pick the bump.
           fetch-depth: 0
+          # Not just for the fetch: checkout persists an http.extraheader
+          # Authorization for whichever token it used, and that header wins over
+          # the credentials PSR embeds in its push URL. Left as GITHUB_TOKEN,
+          # the push would be attributed to GITHUB_TOKEN, miss the bypass and be
+          # rejected -- even though PSR was handed the App token.
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Setup | Pin the release branch to this workflow's commit
         # Guards against releasing a newer commit that landed on main while
@@ -67,6 +102,6 @@ jobs:
         # it; see the note in [tool.semantic_release].
         uses: python-semantic-release/python-semantic-release@v10
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          git_committer_name: github-actions
-          git_committer_email: actions@users.noreply.github.com
+          github_token: ${{ steps.app-token.outputs.token }}
+          git_committer_name: ${{ steps.app-token.outputs.app-slug }}[bot]
+          git_committer_email: ${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com

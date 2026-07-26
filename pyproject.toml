@@ -43,9 +43,10 @@ testpaths = ["tests"]
 commit_parser = "conventional"
 version_toml = ["pyproject.toml:project.version"]
 # Conventional, so the release commit itself parses as a no-op release. The
-# [skip ci] guard is belt-and-braces: pushes made with GITHUB_TOKEN already
-# don't retrigger workflows, but that stops being true if this ever moves to a
-# PAT (e.g. to satisfy branch protection).
+# [skip ci] guard is load-bearing, not belt-and-braces: the release is pushed
+# with a GitHub App token (to satisfy the main ruleset), and unlike
+# GITHUB_TOKEN an App token *does* retrigger workflows. Without it, every
+# release would start another release run.
 commit_message = "chore: release {version} [skip ci]"
 
 # uv.lock records the project's own version too, so it has to be re-locked
