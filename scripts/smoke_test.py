@@ -15,14 +15,16 @@ To exercise the full create/get/update lifecycle, point it at a dedicated
 throwaway project via TAIGA_SMOKE_PROJECT_SLUG (create the project once in
 Taiga first — this tool cannot create projects). When set, the run creates an
 epic and a linked story in that project, updates them, and reads them back. It
-then runs the sprint lifecycle: create a sprint, move the story in and out of
-it, close the sprint and delete it.
+then runs the issue lifecycle (create, update, comment and delete an issue,
+exercising the per-project type/priority/severity catalogues) and the sprint
+lifecycle: create a sprint, move the story in and out of it, close the sprint
+and delete it.
 
     TAIGA_SMOKE_PROJECT_SLUG=your-smoke-project uv run python scripts/smoke_test.py
 
 Note: epics and stories have no delete operation, so each full run leaves a new
-(timestamped) epic + story behind in the smoke project. The sprint it creates
-is deleted at the end of the run.
+(timestamped) epic + story behind in the smoke project. The issue and the
+sprint it creates are both deleted at the end of the run.
 """
 
 import asyncio
@@ -197,7 +199,110 @@ async def write_lifecycle(pid: int) -> None:
     result = await server.reorder_backlog_stories(project_id=pid, story_ids=[story.id])
     print(result)
 
+    await issue_lifecycle(pid, stamp)
     await sprint_lifecycle(pid, story.id, stamp)
+
+
+async def issue_lifecycle(pid: int, stamp: str) -> None:
+    """Exercise create/get/update/comment/delete for issues.
+
+    Like the sprint lifecycle and unlike the epic/story one, this leaves
+    nothing behind — issues can be deleted.
+
+    The point of running this against the real API is the four per-project
+    catalogues (status, type, priority, severity). Mocked tests can only prove
+    we send whatever id a fake /issue-types returned; only Taiga proves those
+    endpoints exist, that they are the ones scoped by ?project, and that the
+    ids they hand back are accepted on a POST /issues.
+    """
+    client = server._get_client()
+
+    # Resolve real names from this project rather than guessing: a project's
+    # catalogues are editable, so "Bug"/"High"/"Normal" are conventions, not
+    # guarantees, and a fixed guess would fail on a customised project.
+    types = await client._get("/issue-types", params={"project": pid})
+    priorities = await client._get("/priorities", params={"project": pid})
+    severities = await client._get("/severities", params={"project": pid})
+    assert types and priorities and severities, (
+        "project has an empty issue catalogue; issues cannot be created"
+    )
+
+    print(f"\n== create_issue (project {pid}) ==")
+    issue = await client.create_issue(
+        project_id=pid,
+        subject=f"[smoke {stamp}] issue",
+        description="Created by smoke_test.py",
+        issue_type=types[0]["name"],
+        priority=priorities[0]["name"],
+        severity=severities[0]["name"],
+    )
+    print(f"created issue #{issue.ref} (id {issue.id})")
+    assert issue.project_slug, "create_issue response is missing project_extra_info"
+    # Names really were resolved to this project's ids and accepted.
+    assert issue.type == types[0]["id"], "issue type was not applied"
+    assert issue.priority == priorities[0]["id"], "issue priority was not applied"
+    assert issue.severity == severities[0]["id"], "issue severity was not applied"
+
+    print("\n== get_issue ==")
+    result = await server.get_issue(issue_id=issue.id)
+    print(result)
+    # The UI addresses issues under /issue/<ref>; a wrong kind here 404s for a
+    # human following the link, which no mocked test would notice.
+    assert f"/issue/{issue.ref}" in result, "get_issue link is not an issue URL"
+
+    print("\n== get_issue_by_ref ==")
+    print(await server.get_issue_by_ref(project_id=pid, ref=issue.ref))
+
+    print("\n== update_issue (severity + description) ==")
+    result = await server.update_issue(
+        issue_id=issue.id,
+        description="Updated by smoke_test.py",
+        severity=severities[-1]["name"],
+    )
+    print(result)
+    updated = await client.get_issue(issue.id)
+    assert updated.severity == severities[-1]["id"], "issue severity was not updated"
+
+    print("\n== update_issue: unknown severity is rejected with the real values ==")
+    # Proves the error an agent gets back names this project's severities.
+    try:
+        await server.update_issue(issue_id=issue.id, severity="Definitely Not A Sev")
+    except ValueError as exc:
+        assert severities[0]["name"] in str(exc), (
+            f"unknown-severity error does not list the project's severities: {exc}"
+        )
+        print(f"rejected as expected: {exc}")
+    else:
+        raise AssertionError("an unknown severity was accepted")
+
+    print("\n== add_comment (issue) ==")
+    result = await server.add_comment(
+        item_type="issue", item_id=issue.id, comment="Commented by smoke_test.py"
+    )
+    print(result)
+    unchanged = await client.get_issue(issue.id)
+    assert unchanged.description == "Updated by smoke_test.py", (
+        "add_comment overwrote the issue description"
+    )
+
+    print("\n== list_comments (issue) ==")
+    result = await server.list_comments(item_type="issue", item_id=issue.id)
+    print(result)
+    # Proves /history/issue/<id> is the right feed name for issues.
+    assert "Commented by smoke_test.py" in result, (
+        "list_comments did not return the comment just added to the issue"
+    )
+
+    print("\n== list_issues (should include the new issue) ==")
+    listed = await client.list_issues(project_id=pid)
+    assert any(i.id == issue.id for i in listed), (
+        "new issue is missing from list_issues"
+    )
+
+    print("\n== delete_issue ==")
+    print(await server.delete_issue(issue_id=issue.id))
+    remaining = await client.list_issues(project_id=pid)
+    assert not any(i.id == issue.id for i in remaining), "issue was not deleted"
 
 
 async def sprint_lifecycle(pid: int, story_id: int, stamp: str) -> None:

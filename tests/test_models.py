@@ -1,4 +1,4 @@
-from taiga_mcp.models import Epic, UserStory
+from taiga_mcp.models import Epic, Issue, UserStory
 
 
 def test_epic_parses_detail_fields():
@@ -57,3 +57,28 @@ def test_user_story_parses_epics_field():
         epics=[{"ref": 5, "subject": "Epic A"}],
     )
     assert s.epics == [{"ref": 5, "subject": "Epic A"}]
+
+
+def test_issue_parses_catalogue_ids_and_status_name():
+    i = Issue(
+        id=3,
+        ref=12,
+        subject="Login times out",
+        project=10,
+        type=1,
+        priority=2,
+        severity=3,
+        version=4,
+        status_extra_info={"name": "New"},
+        project_extra_info={"slug": "example-project"},
+    )
+    # type/priority/severity carry no *_extra_info, so they stay ids.
+    assert (i.type, i.priority, i.severity) == (1, 2, 3)
+    assert i.status == "New"
+    assert i.project_slug == "example-project"
+
+
+def test_issue_status_is_unknown_without_extra_info():
+    i = Issue(id=3, ref=12, subject="X", project=10)
+    assert i.status == "unknown"
+    assert i.project_slug is None

@@ -6,7 +6,7 @@ import respx
 
 from taiga_mcp import server
 from taiga_mcp.client import TaigaClient
-from taiga_mcp.models import Comment, Epic, Project, Sprint, Task, UserStory
+from taiga_mcp.models import Comment, Epic, Issue, Project, Sprint, Task, UserStory
 
 TAIGA_URL = "https://api.taiga.io/api/v1"
 
@@ -19,6 +19,7 @@ def mock_client(monkeypatch):
     mock.list_tasks.return_value = []
     mock.list_sprints.return_value = []
     mock.list_epics.return_value = []
+    mock.list_issues.return_value = []
     monkeypatch.setattr(server, "_client", mock)
     monkeypatch.setattr(server, "_ui_base", None)
     return mock
@@ -805,3 +806,148 @@ async def test_reorder_backlog_stories_reports_before_anchor(mock_client):
         project_id=10, story_ids=[3], after_story_id=None, before_story_id=7
     )
     assert "before story 7" in result
+
+
+async def test_list_issues_passes_every_filter(mock_client):
+    await server.list_issues(project_id=1, sprint_id=10, status="open", assigned_to=42)
+    mock_client.list_issues.assert_called_once_with(
+        project_id=1, sprint_id=10, status="open", assigned_to=42
+    )
+
+
+async def test_list_issues_empty(mock_client):
+    assert "No issues found" in await server.list_issues(project_id=1)
+
+
+async def test_list_issues_formats_ref_id_and_status(mock_client):
+    mock_client.list_issues.return_value = [
+        Issue(
+            id=3,
+            ref=12,
+            subject="Login times out",
+            project=10,
+            status_extra_info={"name": "New"},
+        )
+    ]
+    result = await server.list_issues(project_id=10)
+    assert "#12" in result and "id: 3" in result
+    assert "Login times out" in result and "[New]" in result
+
+
+async def test_get_issue_shows_catalogue_ids_and_link(mock_client, ui_base):
+    mock_client.get_issue.return_value = Issue(
+        id=3,
+        ref=12,
+        subject="Login times out",
+        project=10,
+        description="500 on /login",
+        type=1,
+        priority=2,
+        severity=3,
+        status_extra_info={"name": "New"},
+        project_extra_info={"slug": "example-project"},
+    )
+    result = await server.get_issue(issue_id=3)
+    assert "#12 Login times out [New]" in result
+    # Ids, not names: Taiga sends no *_extra_info for these three.
+    assert "Type: 1" in result
+    assert "Priority: 2" in result
+    assert "Severity: 3" in result
+    assert "500 on /login" in result
+    # The UI addresses issues under /issue/<ref>, not /us/<ref>.
+    assert "https://tree.taiga.io/project/example-project/issue/12" in result
+
+
+async def test_issue_detail_omits_catalogue_lines_when_unset(mock_client):
+    mock_client.get_issue.return_value = Issue(
+        id=3, ref=12, subject="X", project=10, status_extra_info={"name": "New"}
+    )
+    result = await server.get_issue(issue_id=3)
+    assert "Type:" not in result
+    assert "Priority:" not in result
+    assert "Severity:" not in result
+
+
+async def test_story_detail_never_grows_issue_lines(mock_client):
+    # The three lines are read off the item with getattr, so a story — which
+    # has no such fields — must be formatted exactly as before.
+    mock_client.get_story.return_value = UserStory(
+        id=2, ref=9, subject="Story A", project=10, status_extra_info={"name": "New"}
+    )
+    result = await server.get_story(story_id=2)
+    assert "Type:" not in result and "Severity:" not in result
+
+
+async def test_get_issue_by_ref_delegates_with_project_and_ref(mock_client):
+    mock_client.get_issue_by_ref.return_value = Issue(
+        id=3, ref=12, subject="X", project=10
+    )
+    await server.get_issue_by_ref(project_id=10, ref=12)
+    mock_client.get_issue_by_ref.assert_called_once_with(10, 12)
+
+
+async def test_create_issue_passes_names_through_and_links_result(mock_client, ui_base):
+    mock_client.create_issue.return_value = Issue(
+        id=3,
+        ref=12,
+        subject="Login times out",
+        project=10,
+        project_extra_info={"slug": "example-project"},
+    )
+    result = await server.create_issue(
+        project_id=10,
+        subject="Login times out",
+        issue_type="Bug",
+        priority="High",
+        severity="Normal",
+        status="New",
+    )
+    kwargs = mock_client.create_issue.call_args.kwargs
+    assert kwargs["issue_type"] == "Bug"
+    assert kwargs["priority"] == "High"
+    assert kwargs["severity"] == "Normal"
+    assert kwargs["status"] == "New"
+    assert "Created #12" in result
+    assert "https://tree.taiga.io/project/example-project/issue/12" in result
+
+
+async def test_update_issue_forwards_only_what_it_was_given(mock_client):
+    mock_client.update_issue.return_value = Issue(id=3, ref=12, subject="X", project=10)
+    await server.update_issue(issue_id=3, severity="Critical")
+    args, kwargs = mock_client.update_issue.call_args
+    assert args == (3,)
+    assert kwargs["severity"] == "Critical"
+    assert kwargs["subject"] is None  # untouched fields stay None
+
+
+async def test_update_issue_by_ref_forwards_project_and_ref(mock_client):
+    mock_client.update_issue_by_ref.return_value = Issue(
+        id=3, ref=12, subject="X", project=10
+    )
+    await server.update_issue_by_ref(project_id=10, ref=12, status="Closed")
+    args, kwargs = mock_client.update_issue_by_ref.call_args
+    assert args == (10, 12)
+    assert kwargs["status"] == "Closed"
+
+
+async def test_comment_tools_accept_the_issue_item_type(mock_client):
+    mock_client.add_comment.return_value = Issue(id=3, ref=12, subject="X", project=10)
+    await server.add_comment(item_type="issue", item_id=3, comment="Reproduced")
+    mock_client.add_comment.assert_called_once_with("issue", 3, "Reproduced")
+
+    mock_client.list_comments.return_value = [
+        Comment(comment="Reproduced", created_at="2026-01-01")
+    ]
+    result = await server.list_comments(item_type="issue", item_id=3)
+    assert "Reproduced" in result
+
+
+async def test_delete_issue_reads_the_issue_before_deleting_it(mock_client):
+    # Read first: after the delete there is nothing left to name in the result.
+    mock_client.get_issue.return_value = Issue(
+        id=3, ref=12, subject="Login times out", project=10
+    )
+    result = await server.delete_issue(issue_id=3)
+    mock_client.get_issue.assert_called_once_with(3)
+    mock_client.delete_issue.assert_called_once_with(3)
+    assert "Deleted #12 Login times out" in result

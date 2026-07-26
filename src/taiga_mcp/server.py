@@ -8,7 +8,7 @@ from mcp.server.fastmcp import FastMCP
 
 from taiga_mcp.auth import authenticate
 from taiga_mcp.client import TaigaClient
-from taiga_mcp.models import Comment, Epic, Sprint, Task
+from taiga_mcp.models import Comment, Epic, Issue, Sprint, Task
 
 load_dotenv()
 
@@ -35,8 +35,8 @@ def _derive_ui_base(api_url: str) -> str:
 
 
 def _permalink(item) -> str | None:
-    """Web-UI URL for an epic, story, task or sprint, so a human can eyeball
-    the result of a write. None when the UI base or project slug is
+    """Web-UI URL for an epic, story, task, issue or sprint, so a human can
+    eyeball the result of a write. None when the UI base or project slug is
     unavailable."""
     slug = getattr(item, "project_slug", None)
     if _ui_base is None or slug is None:
@@ -50,6 +50,8 @@ def _permalink(item) -> str | None:
         kind = "epic"
     elif isinstance(item, Task):
         kind = "task"
+    elif isinstance(item, Issue):
+        kind = "issue"
     else:
         kind = "us"
     return f"{_ui_base}/project/{slug}/{kind}/{item.ref}"
@@ -67,6 +69,12 @@ def _format_detail(item) -> str:
         lines.append(f"Link: {link}")
     if getattr(item, "milestone_name", None):
         lines.append(f"Sprint: {item.milestone_name}")
+    # Issue-only, and ids rather than names: Taiga sends no *_extra_info for
+    # these three, so naming them would cost a request per catalogue per read.
+    for field in ("type", "priority", "severity"):
+        value = getattr(item, field, None)
+        if value is not None:
+            lines.append(f"{field.capitalize()}: {value}")
     if item.assigned_to is not None:
         lines.append(f"Assigned to: {item.assigned_to}")
     blocked = f"Blocked: {bool(item.is_blocked)}"
@@ -193,6 +201,35 @@ async def list_tasks(project_id: int, user_story_id: int | None = None) -> str:
 
 
 @mcp.tool()
+async def list_issues(
+    project_id: int,
+    sprint_id: int | None = None,
+    status: str | None = None,
+    assigned_to: int | None = None,
+) -> str:
+    """
+    List issues for a Taiga project.
+
+    Args:
+        project_id: Numeric Taiga project ID.
+        sprint_id: Optional sprint (milestone) ID to filter by.
+        status: Optional filter — 'open' or 'closed'.
+        assigned_to: Optional numeric user id to filter by.
+    """
+    issues = await _get_client().list_issues(
+        project_id=project_id,
+        sprint_id=sprint_id,
+        status=status,
+        assigned_to=assigned_to,
+    )
+    if not issues:
+        return "No issues found."
+    return "\n".join(
+        f"- #{i.ref} {i.subject} (id: {i.id}) [{i.status}]" for i in issues
+    )
+
+
+@mcp.tool()
 async def list_epics(project_id: int) -> str:
     """
     List epics for a Taiga project.
@@ -224,6 +261,28 @@ async def get_story(story_id: int) -> str:
         story_id: Numeric Taiga user story ID.
     """
     return _format_detail(await _get_client().get_story(story_id))
+
+
+@mcp.tool()
+async def get_issue(issue_id: int) -> str:
+    """Get a single Taiga issue by its numeric id.
+
+    Args:
+        issue_id: Numeric Taiga issue ID.
+    """
+    return _format_detail(await _get_client().get_issue(issue_id))
+
+
+@mcp.tool()
+async def get_issue_by_ref(project_id: int, ref: int) -> str:
+    """Get a single Taiga issue by its per-project #ref (the number shown in
+    the Taiga UI), not its internal id.
+
+    Args:
+        project_id: Numeric Taiga project ID.
+        ref: The issue's #ref within that project.
+    """
+    return _format_detail(await _get_client().get_issue_by_ref(project_id, ref))
 
 
 @mcp.tool()
@@ -331,6 +390,181 @@ async def create_story(
         blocked_note=blocked_note,
     )
     return _with_link(f"Created #{story.ref} {story.subject} (id: {story.id})", story)
+
+
+@mcp.tool()
+async def create_issue(
+    project_id: int,
+    subject: str,
+    description: str | None = None,
+    status: str | None = None,
+    issue_type: str | None = None,
+    priority: str | None = None,
+    severity: str | None = None,
+    sprint_id: int | None = None,
+    assigned_to: int | None = None,
+    tags: list | None = None,
+    is_blocked: bool | None = None,
+    blocked_note: str | None = None,
+) -> str:
+    """
+    Create a Taiga issue.
+
+    Args:
+        project_id: Numeric Taiga project ID.
+        subject: Issue title (required).
+        description: Optional body text.
+        status: Optional status NAME (resolved to the project's status id).
+        issue_type: Optional type NAME, e.g. 'Bug' (Taiga's `type` field).
+        priority: Optional priority NAME, e.g. 'High'.
+        severity: Optional severity NAME, e.g. 'Normal'.
+        sprint_id: Optional sprint (milestone) id.
+        assigned_to: Optional numeric user id.
+        tags: Optional list of tags.
+        is_blocked: Optional blocked flag.
+        blocked_note: Optional reason when blocked.
+
+    Every NAME above is per-project: an unknown one fails with the values this
+    project actually defines, which is how to discover them.
+    """
+    issue = await _get_client().create_issue(
+        project_id=project_id,
+        subject=subject,
+        description=description,
+        status=status,
+        issue_type=issue_type,
+        priority=priority,
+        severity=severity,
+        sprint_id=sprint_id,
+        assigned_to=assigned_to,
+        tags=tags,
+        is_blocked=is_blocked,
+        blocked_note=blocked_note,
+    )
+    return _with_link(f"Created #{issue.ref} {issue.subject} (id: {issue.id})", issue)
+
+
+@mcp.tool()
+async def update_issue(
+    issue_id: int,
+    subject: str | None = None,
+    description: str | None = None,
+    status: str | None = None,
+    issue_type: str | None = None,
+    priority: str | None = None,
+    severity: str | None = None,
+    sprint_id: int | None = None,
+    assigned_to: int | None = None,
+    tags: list | None = None,
+    is_blocked: bool | None = None,
+    blocked_note: str | None = None,
+) -> str:
+    """
+    Update a Taiga issue. Only the fields you pass are changed.
+
+    Args:
+        issue_id: Numeric Taiga issue ID.
+        subject: Optional new title.
+        description: Optional new body text.
+        status: Optional status NAME (resolved to the project's status id).
+        issue_type: Optional type NAME, e.g. 'Bug' (Taiga's `type` field).
+        priority: Optional priority NAME, e.g. 'High'.
+        severity: Optional severity NAME, e.g. 'Normal'.
+        sprint_id: Optional sprint (milestone) id.
+        assigned_to: Optional numeric user id.
+        tags: Optional list of tags.
+        is_blocked: Optional blocked flag.
+        blocked_note: Optional reason when blocked.
+
+    None leaves a field unchanged; '' clears it.
+    """
+    issue = await _get_client().update_issue(
+        issue_id,
+        subject=subject,
+        description=description,
+        status=status,
+        issue_type=issue_type,
+        priority=priority,
+        severity=severity,
+        sprint_id=sprint_id,
+        assigned_to=assigned_to,
+        tags=tags,
+        is_blocked=is_blocked,
+        blocked_note=blocked_note,
+    )
+    return _with_link(f"Updated #{issue.ref} {issue.subject} (id: {issue.id})", issue)
+
+
+@mcp.tool()
+async def update_issue_by_ref(
+    project_id: int,
+    ref: int,
+    subject: str | None = None,
+    description: str | None = None,
+    status: str | None = None,
+    issue_type: str | None = None,
+    priority: str | None = None,
+    severity: str | None = None,
+    sprint_id: int | None = None,
+    assigned_to: int | None = None,
+    tags: list | None = None,
+    is_blocked: bool | None = None,
+    blocked_note: str | None = None,
+) -> str:
+    """
+    Update a Taiga issue by its per-project #ref (the number shown in the Taiga
+    UI), not its internal id. Only the fields you pass are changed.
+
+    Args:
+        project_id: Numeric Taiga project ID.
+        ref: The issue's #ref within that project.
+        subject: Optional new title.
+        description: Optional new body text.
+        status: Optional status NAME (resolved to the project's status id).
+        issue_type: Optional type NAME, e.g. 'Bug' (Taiga's `type` field).
+        priority: Optional priority NAME, e.g. 'High'.
+        severity: Optional severity NAME, e.g. 'Normal'.
+        sprint_id: Optional sprint (milestone) id.
+        assigned_to: Optional numeric user id.
+        tags: Optional list of tags.
+        is_blocked: Optional blocked flag.
+        blocked_note: Optional reason when blocked.
+
+    None leaves a field unchanged; '' clears it.
+    """
+    issue = await _get_client().update_issue_by_ref(
+        project_id,
+        ref,
+        subject=subject,
+        description=description,
+        status=status,
+        issue_type=issue_type,
+        priority=priority,
+        severity=severity,
+        sprint_id=sprint_id,
+        assigned_to=assigned_to,
+        tags=tags,
+        is_blocked=is_blocked,
+        blocked_note=blocked_note,
+    )
+    return _with_link(f"Updated #{issue.ref} {issue.subject} (id: {issue.id})", issue)
+
+
+@mcp.tool()
+async def delete_issue(issue_id: int) -> str:
+    """
+    Delete a Taiga issue permanently. This cannot be undone.
+
+    Unlike epics and user stories, which Taiga has no delete operation for,
+    issues can be removed outright — there is nothing to detach and nothing
+    left behind.
+
+    Args:
+        issue_id: Numeric Taiga issue ID.
+    """
+    issue = await _get_client().get_issue(issue_id)
+    await _get_client().delete_issue(issue_id)
+    return f"Deleted #{issue.ref} {issue.subject} (id: {issue.id})"
 
 
 @mcp.tool()
@@ -520,7 +754,7 @@ async def add_comment(item_type: str, item_id: int, comment: str) -> str:
     appended to the item's activity timeline; no other field is changed.
 
     Args:
-        item_type: What is being commented on — 'story', 'epic' or 'task'.
+        item_type: What is being commented on — 'story', 'epic', 'task' or 'issue'.
         item_id: Numeric Taiga ID of that item (not its #ref).
         comment: Comment body (required, non-empty). Markdown is supported.
     """
@@ -537,7 +771,7 @@ async def add_comment_by_ref(
     per-project #ref (the number shown in the Taiga UI), not its internal id.
 
     Args:
-        item_type: What is being commented on — 'story', 'epic' or 'task'.
+        item_type: What is being commented on — 'story', 'epic', 'task' or 'issue'.
         project_id: Numeric Taiga project ID.
         ref: The item's #ref within that project.
         comment: Comment body (required, non-empty). Markdown is supported.
@@ -553,7 +787,7 @@ async def list_comments(item_type: str, item_id: int) -> str:
     Comments deleted in the Taiga UI are not shown.
 
     Args:
-        item_type: What to read comments from — 'story', 'epic' or 'task'.
+        item_type: What to read comments from — 'story', 'epic', 'task' or 'issue'.
         item_id: Numeric Taiga ID of that item (not its #ref).
     """
     return _format_comments(await _get_client().list_comments(item_type, item_id))
@@ -566,7 +800,7 @@ async def list_comments_by_ref(item_type: str, project_id: int, ref: int) -> str
     per-project #ref (the number shown in the Taiga UI), not its internal id.
 
     Args:
-        item_type: What to read comments from — 'story', 'epic' or 'task'.
+        item_type: What to read comments from — 'story', 'epic', 'task' or 'issue'.
         project_id: Numeric Taiga project ID.
         ref: The item's #ref within that project.
     """

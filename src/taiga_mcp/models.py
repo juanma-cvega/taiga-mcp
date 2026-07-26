@@ -77,6 +77,46 @@ class Task(BaseModel):
         return None
 
 
+class Issue(BaseModel):
+    """A Taiga issue (bug/question/enhancement tracker item).
+
+    `type`, `priority` and `severity` come back as bare ids: unlike `status`
+    they carry no *_extra_info, so there is no name to read without fetching
+    the project's catalogues. They are surfaced as ids, the way `assigned_to`
+    already is; writes take names and resolve them.
+    """
+
+    id: int
+    ref: int
+    subject: str
+    project: int
+    milestone: int | None = None
+    milestone_name: str | None = None
+    description: str | None = None
+    tags: list | None = None
+    is_blocked: bool | None = None
+    blocked_note: str | None = None
+    assigned_to: int | None = None
+    version: int | None = None
+    type: int | None = None
+    priority: int | None = None
+    severity: int | None = None
+    status_extra_info: dict | None = None
+    project_extra_info: dict | None = None
+
+    @property
+    def status(self) -> str:
+        if self.status_extra_info:
+            return self.status_extra_info.get("name", "unknown")
+        return "unknown"
+
+    @property
+    def project_slug(self) -> str | None:
+        if self.project_extra_info:
+            return self.project_extra_info.get("slug")
+        return None
+
+
 class Comment(BaseModel):
     """One comment from an item's history feed.
 

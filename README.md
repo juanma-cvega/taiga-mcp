@@ -1,8 +1,8 @@
 # taiga-mcp
 
 An [MCP](https://modelcontextprotocol.io) server that exposes a
-[Taiga](https://taiga.io) account — projects, epics, user stories, tasks, and
-sprints — as tools an MCP client (e.g. Claude Code) can call.
+[Taiga](https://taiga.io) account — projects, epics, user stories, tasks,
+issues, and sprints — as tools an MCP client (e.g. Claude Code) can call.
 
 ## Requirements
 
@@ -66,6 +66,7 @@ claude mcp add taiga -- uv run --directory /path/to/taiga-mcp taiga-mcp
 | `list_projects` | — | List all projects accessible to the authenticated user. |
 | `list_epics` | `project_id` | List epics for a project. |
 | `list_user_stories` | `project_id`, `sprint_id?`, `status?` (`open`/`closed`) | List user stories for a project, optionally filtered by sprint or status. |
+| `list_issues` | `project_id`, `sprint_id?`, `status?` (`open`/`closed`), `assigned_to?` | List issues for a project, optionally filtered by sprint, status or assignee. |
 | `list_tasks` | `project_id`, `user_story_id?` | List tasks for a project, optionally scoped to a user story. |
 | `list_sprints` | `project_id`, `closed?` | List sprints for a project, optionally filtered to open or closed ones. |
 | `get_current_sprint` | `project_id` | Get the currently open sprint for a project. |
@@ -82,14 +83,28 @@ claude mcp add taiga -- uv run --directory /path/to/taiga-mcp taiga-mcp
 | `get_story` | `story_id` | Get a single story by id with its full field set. |
 | `get_epic_by_ref` | `project_id`, `ref` | Get a single epic by its per-project `#ref` (the number shown in the Taiga UI). |
 | `get_story_by_ref` | `project_id`, `ref` | Get a single story by its per-project `#ref`. |
+| `get_issue` | `issue_id` | Get a single issue by id with its full field set. |
+| `get_issue_by_ref` | `project_id`, `ref` | Get a single issue by its per-project `#ref`. |
+| `create_issue` | `project_id`, `subject`, + optional `description`, `status`, `issue_type`, `priority`, `severity`, `sprint_id`, `assigned_to`, `tags`, `is_blocked`, `blocked_note` | Create an issue. `status`, `issue_type`, `priority` and `severity` are names, not ids. |
 | `update_epic` | `epic_id`, + any field to change | Update an epic. `None` leaves a field unchanged; `''` clears it. |
 | `update_story` | `story_id`, + any field to change | Update a story. `None` leaves a field unchanged; `''` clears it. `epic_id` attaches it to an epic (added alongside any epic it is already in). |
 | `update_epic_by_ref` | `project_id`, `ref`, + any field to change | Update an epic by its per-project `#ref`. |
 | `update_story_by_ref` | `project_id`, `ref`, + any field to change | Update a story by its per-project `#ref`. Accepts `epic_id` like `update_story`. |
-| `add_comment` | `item_type` (`story`/`epic`/`task`), `item_id`, `comment` | Add a comment to an existing item. No other field is touched. |
+| `update_issue` | `issue_id`, + any field to change | Update an issue. `None` leaves a field unchanged; `''` clears it. |
+| `update_issue_by_ref` | `project_id`, `ref`, + any field to change | Update an issue by its per-project `#ref`. |
+| `delete_issue` | `issue_id` | Delete an issue permanently. Unlike epics and stories, which Taiga cannot delete, issues are removed outright. |
+| `add_comment` | `item_type` (`story`/`epic`/`task`/`issue`), `item_id`, `comment` | Add a comment to an existing item. No other field is touched. |
 | `add_comment_by_ref` | `item_type`, `project_id`, `ref`, `comment` | Add a comment to an item addressed by its per-project `#ref`. |
-| `list_comments` | `item_type` (`story`/`epic`/`task`), `item_id` | Read an item's comments, oldest first. Comments deleted in the UI are omitted. |
+| `list_comments` | `item_type` (`story`/`epic`/`task`/`issue`), `item_id` | Read an item's comments, oldest first. Comments deleted in the UI are omitted. |
 | `list_comments_by_ref` | `item_type`, `project_id`, `ref` | Read the comments on an item addressed by its per-project `#ref`. |
+
+An issue's `status`, `issue_type`, `priority` and `severity` are written as
+names and resolved against the project, which defines its own set of each —
+passing an unknown one fails with the values that project actually has, which
+is how to discover them. They read back as numeric ids: Taiga returns no name
+alongside them the way it does for `status`, so naming them would cost an extra
+request per catalogue on every read. `issue_type` is Taiga's `type` field,
+renamed to avoid shadowing the builtin.
 
 The list tools show both the `#ref` (the identifier a human sees in the Taiga
 UI) and the numeric `id`. The `id` tools (`get_epic`, `update_story`, …) take
@@ -160,14 +175,16 @@ uv run python scripts/smoke_test.py
 To exercise the full create/get/update lifecycle without touching real work,
 create a dedicated throwaway project in Taiga and point the smoke test at it by
 slug (the tool cannot create projects itself). It then creates an epic and a
-linked story there, updates them, and reads them back, and finally runs the
-sprint lifecycle — create a sprint, move the story in and out of it, close the
-sprint and delete it:
+linked story there, updates them, and reads them back, then runs the issue
+lifecycle — create, update, comment on and delete an issue, exercising the
+per-project type/priority/severity catalogues — and finally the sprint
+lifecycle: create a sprint, move the story in and out of it, close the sprint
+and delete it:
 
 ```bash
 TAIGA_SMOKE_PROJECT_SLUG=your-smoke-project uv run python scripts/smoke_test.py
 ```
 
 Epics and stories have no delete operation, so each full run leaves a new
-(timestamped) epic and story behind in the smoke project. The sprint it creates
-is deleted at the end of the run.
+(timestamped) epic and story behind in the smoke project. The issue and the
+sprint it creates are both deleted at the end of the run.
