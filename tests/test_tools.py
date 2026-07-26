@@ -951,3 +951,196 @@ async def test_delete_issue_reads_the_issue_before_deleting_it(mock_client):
     mock_client.get_issue.assert_called_once_with(3)
     mock_client.delete_issue.assert_called_once_with(3)
     assert "Deleted #12 Login times out" in result
+
+
+async def test_delete_story_warns_that_tasks_go_with_it(mock_client):
+    mock_client.get_story.return_value = UserStory(
+        id=5, ref=20, subject="Checkout flow", project=10
+    )
+    result = await server.delete_story(story_id=5)
+    mock_client.get_story.assert_called_once_with(5)
+    mock_client.delete_story.assert_called_once_with(5)
+    assert "Deleted #20 Checkout flow" in result
+    assert "tasks" in result
+
+
+async def test_delete_story_does_not_delete_when_lookup_fails(mock_client):
+    mock_client.get_story.side_effect = RuntimeError("Taiga API error 404")
+    with pytest.raises(RuntimeError):
+        await server.delete_story(story_id=5)
+    mock_client.delete_story.assert_not_called()
+
+
+async def test_delete_epic_says_its_stories_survive(mock_client):
+    mock_client.get_epic.return_value = Epic(
+        id=7, ref=3, subject="Payments", project=10
+    )
+    result = await server.delete_epic(epic_id=7)
+    mock_client.get_epic.assert_called_once_with(7)
+    mock_client.delete_epic.assert_called_once_with(7)
+    assert "Deleted epic #3 Payments" in result
+    assert "remain in the project" in result
+
+
+async def test_delete_task_names_the_deleted_task(mock_client):
+    mock_client.get_task.return_value = Task(
+        id=9, ref=31, subject="Wire the form", project=10
+    )
+    result = await server.delete_task(task_id=9)
+    mock_client.get_task.assert_called_once_with(9)
+    mock_client.delete_task.assert_called_once_with(9)
+    assert "Deleted task #31 Wire the form" in result
+
+
+async def test_promote_issue_to_story_reports_the_new_story(mock_client, ui_base):
+    mock_client.promote_to_story.return_value = [
+        UserStory(
+            id=88,
+            ref=44,
+            subject="Login fails",
+            project=10,
+            project_extra_info={"slug": "example"},
+        )
+    ]
+    result = await server.promote_issue_to_story(issue_id=3)
+    mock_client.promote_to_story.assert_called_once_with("issue", 3)
+    assert "Promoted issue to story #44 Login fails (id: 88)" in result
+    # The link points at the story that now exists, not the issue behind it.
+    assert "https://tree.taiga.io/project/example/us/44" in result
+
+
+async def test_promote_task_to_story_reports_the_new_story(mock_client):
+    mock_client.promote_to_story.return_value = [
+        UserStory(id=90, ref=45, subject="Wire the form", project=10)
+    ]
+    result = await server.promote_task_to_story(task_id=9)
+    mock_client.promote_to_story.assert_called_once_with("task", 9)
+    assert "Promoted task to story #45 Wire the form (id: 90)" in result
+
+
+async def test_promote_reports_when_taiga_creates_nothing(mock_client):
+    mock_client.promote_to_story.return_value = []
+    result = await server.promote_issue_to_story(issue_id=3)
+    assert "no story" in result
+
+
+async def test_create_task_passes_every_field(mock_client, ui_base):
+    mock_client.create_task.return_value = Task(
+        id=9,
+        ref=31,
+        subject="Wire the form",
+        project=10,
+        project_extra_info={"slug": "example"},
+    )
+    result = await server.create_task(
+        project_id=10,
+        subject="Wire the form",
+        description="the details",
+        status="In progress",
+        user_story_id=5,
+        sprint_id=7,
+        assigned_to=42,
+        tags=["frontend"],
+    )
+    mock_client.create_task.assert_called_once_with(
+        project_id=10,
+        subject="Wire the form",
+        description="the details",
+        status="In progress",
+        user_story_id=5,
+        sprint_id=7,
+        assigned_to=42,
+        tags=["frontend"],
+        is_blocked=None,
+        blocked_note=None,
+    )
+    assert "Created task #31 Wire the form (id: 9)" in result
+    assert "https://tree.taiga.io/project/example/task/31" in result
+
+
+async def test_create_task_without_a_story(mock_client):
+    # Taiga allows a task with no story above it; the tool must not require one.
+    mock_client.create_task.return_value = Task(
+        id=9, ref=31, subject="Loose task", project=10
+    )
+    result = await server.create_task(project_id=10, subject="Loose task")
+    assert mock_client.create_task.call_args.kwargs["user_story_id"] is None
+    assert "Created task #31 Loose task" in result
+
+
+async def test_update_task_reports_the_new_status(mock_client):
+    mock_client.update_task.return_value = Task(
+        id=9,
+        ref=31,
+        subject="Wire the form",
+        project=10,
+        status_extra_info={"name": "Done"},
+    )
+    result = await server.update_task(task_id=9, status="Done")
+    args, kwargs = mock_client.update_task.call_args
+    assert args == (9,)
+    assert kwargs["status"] == "Done"
+    assert "Updated task #31 Wire the form [Done]" in result
+
+
+async def test_update_task_moves_it_under_another_story(mock_client):
+    mock_client.update_task.return_value = Task(
+        id=9, ref=31, subject="Wire the form", project=10
+    )
+    await server.update_task(task_id=9, user_story_id=6)
+    assert mock_client.update_task.call_args.kwargs["user_story_id"] == 6
+
+
+async def test_get_task_formats_detail(mock_client, ui_base):
+    mock_client.get_task.return_value = Task(
+        id=9,
+        ref=31,
+        subject="Wire the form",
+        project=10,
+        milestone_name="Sprint 1",
+        description="the details",
+        is_blocked=True,
+        blocked_note="waiting on design",
+        assigned_to=42,
+        tags=["frontend"],
+        status_extra_info={"name": "In progress"},
+        project_extra_info={"slug": "example"},
+    )
+    result = await server.get_task(task_id=9)
+    mock_client.get_task.assert_called_once_with(9)
+    assert "#31 Wire the form" in result
+    assert "In progress" in result
+    assert "the details" in result
+    assert "Sprint 1" in result
+    assert "waiting on design" in result
+    assert "frontend" in result
+    assert "https://tree.taiga.io/project/example/task/31" in result
+
+
+async def test_get_task_by_ref_formats_detail(mock_client):
+    mock_client.get_task_by_ref.return_value = Task(
+        id=9,
+        ref=31,
+        subject="Wire the form",
+        project=10,
+        status_extra_info={"name": "New"},
+    )
+    result = await server.get_task_by_ref(project_id=10, ref=31)
+    mock_client.get_task_by_ref.assert_called_once_with(10, 31)
+    assert "#31 Wire the form" in result
+    assert "New" in result
+
+
+async def test_update_task_by_ref_passes_project_and_ref(mock_client):
+    mock_client.update_task_by_ref.return_value = Task(
+        id=9,
+        ref=31,
+        subject="Wire the form",
+        project=10,
+        status_extra_info={"name": "Done"},
+    )
+    result = await server.update_task_by_ref(project_id=10, ref=31, status="Done")
+    args, kwargs = mock_client.update_task_by_ref.call_args
+    assert args == (10, 31)
+    assert kwargs["status"] == "Done"
+    assert "Updated task #31 Wire the form [Done]" in result

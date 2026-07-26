@@ -81,6 +81,9 @@ _COMMENT_TARGETS: dict[str, _CommentTarget] = {
 }
 
 
+_PROMOTE_ENDPOINTS: dict[str, str] = {"issue": "/issues", "task": "/tasks"}
+
+
 def _comment_target(item_type: str) -> _CommentTarget:
     try:
         return _COMMENT_TARGETS[item_type]
@@ -277,6 +280,9 @@ class TaigaClient:
     async def get_issue(self, issue_id: int) -> Issue:
         return Issue(**await self._get_one(f"/issues/{issue_id}"))
 
+    async def get_task(self, task_id: int) -> Task:
+        return Task(**await self._get_one(f"/tasks/{task_id}"))
+
     async def get_issue_by_ref(self, project_id: int, ref: int) -> Issue:
         data = await self._get_one(
             "/issues/by_ref", params={"project": project_id, "ref": ref}
@@ -294,6 +300,12 @@ class TaigaClient:
             "/userstories/by_ref", params={"project": project_id, "ref": ref}
         )
         return UserStory(**data)
+
+    async def get_task_by_ref(self, project_id: int, ref: int) -> Task:
+        data = await self._get_one(
+            "/tasks/by_ref", params={"project": project_id, "ref": ref}
+        )
+        return Task(**data)
 
     async def create_epic(
         self,
@@ -360,6 +372,106 @@ class TaigaClient:
         if epic_id is not None:
             await self._link_story_to_epic(story, epic_id, "created")
         return story
+
+    async def create_task(
+        self,
+        project_id: int,
+        subject: str,
+        description: str | None = None,
+        status: str | None = None,
+        user_story_id: int | None = None,
+        sprint_id: int | None = None,
+        assigned_to: int | None = None,
+        tags: list | None = None,
+        is_blocked: bool | None = None,
+        blocked_note: str | None = None,
+    ) -> Task:
+        payload: dict = {"project": project_id, "subject": subject}
+        if status is not None:
+            payload["status"] = await self._resolve_status(
+                "/task-statuses", project_id, status
+            )
+        payload.update(
+            _build_payload(
+                {
+                    "description": description,
+                    "user_story": user_story_id,
+                    "milestone": sprint_id,
+                    "assigned_to": assigned_to,
+                    "tags": tags,
+                    "is_blocked": is_blocked,
+                    "blocked_note": blocked_note,
+                }
+            )
+        )
+        return Task(**await self._post("/tasks", payload))
+
+    async def update_task(
+        self,
+        task_id: int,
+        subject: str | None = None,
+        description: str | None = None,
+        status: str | None = None,
+        user_story_id: int | None = None,
+        sprint_id: int | None = None,
+        assigned_to: int | None = None,
+        tags: list | None = None,
+        is_blocked: bool | None = None,
+        blocked_note: str | None = None,
+    ) -> Task:
+        current = await self._get_one(f"/tasks/{task_id}")
+        payload = {"version": _require_field(current, "version", "task", task_id)}
+        if status is not None:
+            project_id = _require_field(current, "project", "task", task_id)
+            payload["status"] = await self._resolve_status(
+                "/task-statuses", project_id, status
+            )
+        payload.update(
+            _build_payload(
+                {
+                    "subject": subject,
+                    "description": description,
+                    "user_story": user_story_id,
+                    "milestone": sprint_id,
+                    "assigned_to": assigned_to,
+                    "tags": tags,
+                    "is_blocked": is_blocked,
+                    "blocked_note": blocked_note,
+                }
+            )
+        )
+        return Task(**await self._patch(f"/tasks/{task_id}", payload))
+
+    async def update_task_by_ref(
+        self,
+        project_id: int,
+        ref: int,
+        subject: str | None = None,
+        description: str | None = None,
+        status: str | None = None,
+        user_story_id: int | None = None,
+        sprint_id: int | None = None,
+        assigned_to: int | None = None,
+        tags: list | None = None,
+        is_blocked: bool | None = None,
+        blocked_note: str | None = None,
+    ) -> Task:
+        current = await self._get_one(
+            "/tasks/by_ref", params={"project": project_id, "ref": ref}
+        )
+        task_id = _require_field(current, "id", "task", f"#{ref}")
+        return await self.update_task(
+            task_id,
+            subject=subject,
+            description=description,
+            status=status,
+            user_story_id=user_story_id,
+            sprint_id=sprint_id,
+            assigned_to=assigned_to,
+            tags=tags,
+            is_blocked=is_blocked,
+            blocked_note=blocked_note,
+        )
 
     async def _resolve_issue_catalogues(
         self,
@@ -499,6 +611,45 @@ class TaigaClient:
 
     async def delete_issue(self, issue_id: int) -> None:
         await self._delete(f"/issues/{issue_id}")
+
+    async def delete_story(self, story_id: int) -> None:
+        await self._delete(f"/userstories/{story_id}")
+
+    async def delete_epic(self, epic_id: int) -> None:
+        await self._delete(f"/epics/{epic_id}")
+
+    async def delete_task(self, task_id: int) -> None:
+        await self._delete(f"/tasks/{task_id}")
+
+    async def promote_to_story(self, item_type: str, item_id: int) -> list[UserStory]:
+        """Promote an issue or task to a user story.
+
+        This is Taiga's own promotion rather than a copy: subject, description,
+        tags, sprint, assignee, comments, attachments and watchers all carry
+        over, and the new story records where it came from. An issue survives
+        its promotion; a task does not — Taiga deletes it once the story is in
+        place.
+
+        The endpoint takes the project in its body only to authorise the
+        promotion, so it is read off the item rather than asked of the caller,
+        who has no way to supply a project the item isn't in. Taiga answers
+        with the new stories' #refs instead of the stories themselves, so each
+        is read back to give callers a whole object.
+        """
+        try:
+            endpoint = _PROMOTE_ENDPOINTS[item_type]
+        except KeyError:
+            valid = ", ".join(_PROMOTE_ENDPOINTS)
+            raise ValueError(
+                f"Cannot promote a '{item_type}' to a story. Promotable types: {valid}"
+            ) from None
+        current = await self._get_one(f"{endpoint}/{item_id}")
+        project_id = _require_field(current, "project", item_type, item_id)
+        refs = await self._post_list(
+            f"{endpoint}/{item_id}/promote_to_user_story",
+            {"project_id": project_id},
+        )
+        return [await self.get_story_by_ref(project_id, ref) for ref in refs]
 
     async def _link_story_to_epic(
         self, story: UserStory, epic_id: int, action: str
@@ -727,6 +878,13 @@ class TaigaClient:
         return response.json()
 
     async def _post(self, path: str, json: dict) -> dict:
+        response = await self._send("POST", f"{self._base_url}{path}", json=json)
+        _raise_for_taiga_error(response)
+        return response.json()
+
+    async def _post_list(self, path: str, json: dict) -> list:
+        """POST to an endpoint that answers with a JSON array rather than an
+        object (promotion returns a list of created #refs)."""
         response = await self._send("POST", f"{self._base_url}{path}", json=json)
         _raise_for_taiga_error(response)
         return response.json()

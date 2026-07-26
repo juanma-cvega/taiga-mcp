@@ -15,16 +15,19 @@ To exercise the full create/get/update lifecycle, point it at a dedicated
 throwaway project via TAIGA_SMOKE_PROJECT_SLUG (create the project once in
 Taiga first — this tool cannot create projects). When set, the run creates an
 epic and a linked story in that project, updates them, and reads them back. It
-then runs the issue lifecycle (create, update, comment and delete an issue,
-exercising the per-project type/priority/severity catalogues) and the sprint
-lifecycle: create a sprint, move the story in and out of it, close the sprint
-and delete it.
+then runs the issue lifecycle (create, update, comment, promote and delete an
+issue, exercising the per-project type/priority/severity catalogues), the
+sprint lifecycle (create a sprint, move the story in and out of it, close the
+sprint and delete it), and the deletion lifecycle: create and update tasks,
+promote one to a story, then delete the task, story and epics.
 
     TAIGA_SMOKE_PROJECT_SLUG=your-smoke-project uv run python scripts/smoke_test.py
 
-Note: epics and stories have no delete operation, so each full run leaves a new
-(timestamped) epic + story behind in the smoke project. The issue and the
-sprint it creates are both deleted at the end of the run.
+A full run leaves nothing behind — everything it creates it deletes, which is
+also how it verifies what Taiga takes down with each delete (tasks cascade
+from their story; an epic's stories survive it). A run that does NOT finish
+does leave debris, since the teardown is inline: scripts/smoke_cleanup.py
+removes it, and CI runs that after every smoke run whatever the outcome.
 """
 
 import asyncio
@@ -76,7 +79,9 @@ async def write_lifecycle(pid: int) -> None:
     """Exercise create/get/update for epics and stories in the smoke project.
 
     Uses the client directly to capture the created objects' ids, then drives
-    the MCP tools (server.*) for get/update so both layers are exercised.
+    the MCP tools (server.*) for get/update so both layers are exercised. The
+    epics and story created here are torn down by deletion_lifecycle at the
+    end, so a full run leaves the project as it found it.
     """
     client = server._get_client()
     stamp = datetime.now(UTC).isoformat(timespec="seconds")
@@ -201,13 +206,136 @@ async def write_lifecycle(pid: int) -> None:
 
     await issue_lifecycle(pid, stamp)
     await sprint_lifecycle(pid, story.id, stamp)
+    await deletion_lifecycle(pid, story.id, [epic.id, other_epic.id], stamp)
+
+
+async def _create_task(pid: int, story_id: int, subject: str) -> int:
+    """Create a task on a story via the tool, returning its id.
+
+    The tool returns a formatted string, so the id is read back off the story's
+    task list — which doubles as proof that a task created with user_story set
+    really does land under that story.
+    """
+    client = server._get_client()
+    print(
+        await server.create_task(
+            project_id=pid, subject=subject, user_story_id=story_id
+        )
+    )
+    tasks = await client.list_tasks(project_id=pid, user_story_id=story_id)
+    task = next(t for t in tasks if t.subject == subject)
+    return task.id
+
+
+async def deletion_lifecycle(
+    pid: int, story_id: int, epic_ids: list[int], stamp: str
+) -> None:
+    """Exercise task promotion and the story/epic/task deletes, tearing down
+    everything the epic/story lifecycle created.
+
+    Each delete tool promises something about what it takes with it, and those
+    promises are Taiga's referential-integrity rules rather than anything this
+    code does: tasks cascade from their story, epics only lose the links to
+    theirs, and a promoted task is deleted. Mocked tests cannot prove any of
+    it — this can, and it leaves the smoke project clean besides.
+    """
+    client = server._get_client()
+
+    print("\n== create_task + update_task ==")
+    task_id = await _create_task(pid, story_id, f"[smoke {stamp}] task (to delete)")
+    # Tasks carry their own status catalogue, separate from the story one the
+    # epic/story lifecycle resolved against — only the real API proves
+    # /task-statuses is the right endpoint and that its ids are accepted here.
+    task_statuses = await client._get("/task-statuses", params={"project": pid})
+    result = await server.update_task(
+        task_id=task_id,
+        description="Updated by smoke_test.py",
+        status=task_statuses[-1]["name"] if task_statuses else None,
+    )
+    print(result)
+    assert "Link:" in result, "update_task output is missing the UI link"
+    updated = await client.get_task(task_id)
+    assert updated.description == "Updated by smoke_test.py", "task was not updated"
+    assert updated.version is not None, (
+        "task response has no version; update_task cannot version-check its PATCH"
+    )
+
+    print("\n== get_task ==")
+    result = await server.get_task(task_id=task_id)
+    print(result)
+    assert "Link:" in result, "get_task output is missing the UI link"
+
+    print("\n== get_task_by_ref + update_task_by_ref ==")
+    # /tasks/by_ref is absent from Taiga's published API reference, so this is
+    # the only check that the endpoint exists at all for tasks (it does for
+    # stories, epics and issues) — the by_ref tools are unusable if it doesn't.
+    result = await server.get_task_by_ref(project_id=pid, ref=updated.ref)
+    print(result)
+    assert f"#{updated.ref}" in result, "get_task_by_ref returned the wrong task"
+    print(
+        await server.update_task_by_ref(
+            project_id=pid,
+            ref=updated.ref,
+            description="Updated by ref from smoke_test.py",
+        )
+    )
+    assert (await client.get_task(task_id)).description == (
+        "Updated by ref from smoke_test.py"
+    ), "update_task_by_ref did not reach the task"
+
+    print("\n== delete_task ==")
+    print(await server.delete_task(task_id=task_id))
+    tasks = await client.list_tasks(project_id=pid, user_story_id=story_id)
+    assert not any(t.id == task_id for t in tasks), "task was not deleted"
+    assert (await client.get_story(story_id)).id == story_id, (
+        "deleting a task deleted its user story"
+    )
+
+    print("\n== promote_task_to_story ==")
+    task_id = await _create_task(pid, story_id, f"[smoke {stamp}] task (to promote)")
+    result = await server.promote_task_to_story(task_id=task_id)
+    print(result)
+    promoted = next(
+        s
+        for s in await client.list_user_stories(project_id=pid)
+        if s.subject == f"[smoke {stamp}] task (to promote)"
+    )
+    # The half of promotion that differs from an issue's, and the reason the
+    # tool is flagged destructive: Taiga deletes the task it promoted.
+    tasks = await client.list_tasks(project_id=pid, user_story_id=story_id)
+    assert not any(t.id == task_id for t in tasks), (
+        "promoted task still exists; Taiga is expected to delete it"
+    )
+    print(await server.delete_story(story_id=promoted.id))
+
+    print("\n== delete_epic (its stories must survive) ==")
+    print(await server.delete_epic(epic_id=epic_ids[-1]))
+    survivor = await client.get_story(story_id)
+    linked = {item["id"] for item in survivor.epics or []}
+    assert epic_ids[-1] not in linked, "story still links to the deleted epic"
+
+    print("\n== delete_story (its tasks must go with it) ==")
+    task_id = await _create_task(pid, story_id, f"[smoke {stamp}] task (cascade)")
+    print(await server.delete_story(story_id=story_id))
+    remaining = await client.list_user_stories(project_id=pid)
+    assert not any(s.id == story_id for s in remaining), "story was not deleted"
+    # Task.user_story is on_delete=CASCADE, so the task must be gone too.
+    tasks = await client.list_tasks(project_id=pid)
+    assert not any(t.id == task_id for t in tasks), (
+        "task outlived the story it belonged to"
+    )
+
+    print("\n== delete_epic (the last one, leaving nothing behind) ==")
+    print(await server.delete_epic(epic_id=epic_ids[0]))
+    epics = await client.list_epics(project_id=pid)
+    assert not any(e.id in epic_ids for e in epics), "an epic was not deleted"
 
 
 async def issue_lifecycle(pid: int, stamp: str) -> None:
-    """Exercise create/get/update/comment/delete for issues.
+    """Exercise create/get/update/comment/promote/delete for issues.
 
-    Like the sprint lifecycle and unlike the epic/story one, this leaves
-    nothing behind — issues can be deleted.
+    Leaves nothing behind: the issue, and the story it is promoted into, are
+    both deleted at the end.
 
     The point of running this against the real API is the four per-project
     catalogues (status, type, priority, severity). Mocked tests can only prove
@@ -298,6 +426,26 @@ async def issue_lifecycle(pid: int, stamp: str) -> None:
     assert any(i.id == issue.id for i in listed), (
         "new issue is missing from list_issues"
     )
+
+    print("\n== promote_issue_to_story ==")
+    # promote_to_user_story is undocumented in Taiga's API reference, so the
+    # real API is the only thing that proves the endpoint exists, that it
+    # wants project_id in the body, and that it answers with a list of #refs
+    # rather than a story object.
+    result = await server.promote_issue_to_story(issue_id=issue.id)
+    print(result)
+    assert "Link:" in result, "promote_issue_to_story output is missing the UI link"
+    promoted = next(
+        s
+        for s in await client.list_user_stories(project_id=pid)
+        if s.subject == f"[smoke {stamp}] issue"
+    )
+    # An issue survives its own promotion — only a promoted task is deleted.
+    surviving = await client.get_issue(issue.id)
+    assert surviving.id == issue.id, "promoting the issue deleted it"
+
+    print("\n== delete_story (the story the issue was promoted into) ==")
+    print(await server.delete_story(story_id=promoted.id))
 
     print("\n== delete_issue ==")
     print(await server.delete_issue(issue_id=issue.id))

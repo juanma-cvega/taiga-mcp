@@ -1569,3 +1569,305 @@ async def test_delete_issue_calls_the_issue_endpoint():
     client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
     await client.delete_issue(3)
     assert route.called
+
+
+@respx.mock
+async def test_delete_story_calls_the_userstory_endpoint():
+    route = respx.delete(f"{TAIGA_URL}/userstories/5").mock(
+        return_value=httpx.Response(204)
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    await client.delete_story(5)
+    assert route.called
+
+
+@respx.mock
+async def test_delete_epic_calls_the_epic_endpoint():
+    route = respx.delete(f"{TAIGA_URL}/epics/7").mock(return_value=httpx.Response(204))
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    await client.delete_epic(7)
+    assert route.called
+
+
+@respx.mock
+async def test_delete_task_calls_the_task_endpoint():
+    route = respx.delete(f"{TAIGA_URL}/tasks/9").mock(return_value=httpx.Response(204))
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    await client.delete_task(9)
+    assert route.called
+
+
+@respx.mock
+async def test_delete_raises_readable_error_on_http_failure():
+    respx.delete(f"{TAIGA_URL}/userstories/5").mock(
+        return_value=httpx.Response(404, text="Not found")
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    with pytest.raises(RuntimeError, match="404"):
+        await client.delete_story(5)
+
+
+@respx.mock
+async def test_get_task_reads_a_single_task():
+    respx.get(f"{TAIGA_URL}/tasks/9").mock(
+        return_value=httpx.Response(
+            200, json={"id": 9, "ref": 31, "subject": "Wire the form", "project": 1}
+        )
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    task = await client.get_task(9)
+    assert task.ref == 31
+    assert task.subject == "Wire the form"
+
+
+@respx.mock
+async def test_promote_issue_posts_to_the_promote_endpoint():
+    respx.get(f"{TAIGA_URL}/issues/3").mock(
+        return_value=httpx.Response(
+            200, json={"id": 3, "ref": 12, "subject": "Login fails", "project": 1}
+        )
+    )
+    promote = respx.post(f"{TAIGA_URL}/issues/3/promote_to_user_story").mock(
+        return_value=httpx.Response(200, json=[44])
+    )
+    respx.get(f"{TAIGA_URL}/userstories/by_ref").mock(
+        return_value=httpx.Response(
+            200, json={"id": 88, "ref": 44, "subject": "Login fails", "project": 1}
+        )
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    stories = await client.promote_to_story("issue", 3)
+    assert json.loads(promote.calls.last.request.content) == {"project_id": 1}
+    assert [s.ref for s in stories] == [44]
+    assert stories[0].id == 88
+
+
+@respx.mock
+async def test_promote_task_uses_the_task_endpoint():
+    respx.get(f"{TAIGA_URL}/tasks/9").mock(
+        return_value=httpx.Response(
+            200, json={"id": 9, "ref": 31, "subject": "Wire the form", "project": 2}
+        )
+    )
+    promote = respx.post(f"{TAIGA_URL}/tasks/9/promote_to_user_story").mock(
+        return_value=httpx.Response(200, json=[45])
+    )
+    by_ref = respx.get(f"{TAIGA_URL}/userstories/by_ref").mock(
+        return_value=httpx.Response(
+            200, json={"id": 90, "ref": 45, "subject": "Wire the form", "project": 2}
+        )
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    stories = await client.promote_to_story("task", 9)
+    # The project is read off the task, never asked of the caller.
+    assert json.loads(promote.calls.last.request.content) == {"project_id": 2}
+    assert by_ref.calls.last.request.url.params["project"] == "2"
+    assert [s.ref for s in stories] == [45]
+
+
+@respx.mock
+async def test_promote_reads_back_every_ref_taiga_returns():
+    respx.get(f"{TAIGA_URL}/issues/3").mock(
+        return_value=httpx.Response(
+            200, json={"id": 3, "ref": 12, "subject": "Login fails", "project": 1}
+        )
+    )
+    respx.post(f"{TAIGA_URL}/issues/3/promote_to_user_story").mock(
+        return_value=httpx.Response(200, json=[44, 45])
+    )
+    respx.get(f"{TAIGA_URL}/userstories/by_ref").mock(
+        side_effect=[
+            httpx.Response(
+                200, json={"id": 88, "ref": 44, "subject": "A", "project": 1}
+            ),
+            httpx.Response(
+                200, json={"id": 89, "ref": 45, "subject": "B", "project": 1}
+            ),
+        ]
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    stories = await client.promote_to_story("issue", 3)
+    assert [s.ref for s in stories] == [44, 45]
+
+
+async def test_promote_rejects_a_type_taiga_cannot_promote():
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    # Taiga has no story -> issue conversion, so 'story' must fail loudly
+    # rather than POST to an endpoint that does not exist.
+    with pytest.raises(ValueError, match="issue, task"):
+        await client.promote_to_story("story", 5)
+
+
+@respx.mock
+async def test_create_task_posts_the_full_payload():
+    route = respx.post(f"{TAIGA_URL}/tasks").mock(
+        return_value=httpx.Response(
+            201,
+            json={"id": 9, "ref": 31, "subject": "Wire the form", "project": 1},
+        )
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    task = await client.create_task(
+        project_id=1,
+        subject="Wire the form",
+        description="the details",
+        user_story_id=5,
+        sprint_id=10,
+        assigned_to=42,
+        tags=["frontend"],
+    )
+    sent = json.loads(route.calls.last.request.content)
+    assert sent == {
+        "project": 1,
+        "subject": "Wire the form",
+        "description": "the details",
+        # Taiga names these `user_story` and `milestone`; the tool argument
+        # names are friendlier and must be translated on the way out.
+        "user_story": 5,
+        "milestone": 10,
+        "assigned_to": 42,
+        "tags": ["frontend"],
+    }
+    assert task.id == 9
+
+
+@respx.mock
+async def test_create_task_resolves_status_against_task_statuses():
+    # Tasks have their own status catalogue: resolving against
+    # /userstory-statuses would find the wrong id, or none at all.
+    statuses = respx.get(f"{TAIGA_URL}/task-statuses").mock(
+        return_value=httpx.Response(200, json=[{"id": 77, "name": "In progress"}])
+    )
+    route = respx.post(f"{TAIGA_URL}/tasks").mock(
+        return_value=httpx.Response(
+            201, json={"id": 9, "ref": 31, "subject": "T", "project": 1}
+        )
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    await client.create_task(project_id=1, subject="T", status="In progress")
+    assert statuses.calls.last.request.url.params["project"] == "1"
+    assert json.loads(route.calls.last.request.content)["status"] == 77
+
+
+@respx.mock
+async def test_create_task_rejects_an_unknown_status_with_the_real_names():
+    respx.get(f"{TAIGA_URL}/task-statuses").mock(
+        return_value=httpx.Response(200, json=[{"id": 77, "name": "In progress"}])
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    with pytest.raises(ValueError, match="In progress"):
+        await client.create_task(project_id=1, subject="T", status="Nonexistent")
+
+
+@respx.mock
+async def test_update_task_sends_the_current_version():
+    # Tasks are version-checked like stories and epics: a PATCH without the
+    # version Taiga currently holds is rejected as a conflict.
+    respx.get(f"{TAIGA_URL}/tasks/9").mock(
+        return_value=httpx.Response(
+            200,
+            json={"id": 9, "ref": 31, "subject": "T", "project": 1, "version": 4},
+        )
+    )
+    route = respx.patch(f"{TAIGA_URL}/tasks/9").mock(
+        return_value=httpx.Response(
+            200, json={"id": 9, "ref": 31, "subject": "Renamed", "project": 1}
+        )
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    task = await client.update_task(9, subject="Renamed")
+    assert json.loads(route.calls.last.request.content) == {
+        "version": 4,
+        "subject": "Renamed",
+    }
+    assert task.subject == "Renamed"
+
+
+@respx.mock
+async def test_update_task_moves_it_under_another_story():
+    respx.get(f"{TAIGA_URL}/tasks/9").mock(
+        return_value=httpx.Response(
+            200,
+            json={"id": 9, "ref": 31, "subject": "T", "project": 1, "version": 4},
+        )
+    )
+    route = respx.patch(f"{TAIGA_URL}/tasks/9").mock(
+        return_value=httpx.Response(
+            200, json={"id": 9, "ref": 31, "subject": "T", "project": 1}
+        )
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    await client.update_task(9, user_story_id=6)
+    assert json.loads(route.calls.last.request.content)["user_story"] == 6
+
+
+@respx.mock
+async def test_update_task_clears_a_field_with_an_empty_string():
+    respx.get(f"{TAIGA_URL}/tasks/9").mock(
+        return_value=httpx.Response(
+            200,
+            json={"id": 9, "ref": 31, "subject": "T", "project": 1, "version": 4},
+        )
+    )
+    route = respx.patch(f"{TAIGA_URL}/tasks/9").mock(
+        return_value=httpx.Response(
+            200, json={"id": 9, "ref": 31, "subject": "T", "project": 1}
+        )
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    await client.update_task(9, description="")
+    assert json.loads(route.calls.last.request.content)["description"] is None
+
+
+@respx.mock
+async def test_get_task_by_ref_queries_project_and_ref():
+    route = respx.get(f"{TAIGA_URL}/tasks/by_ref").mock(
+        return_value=httpx.Response(
+            200, json={"id": 9, "ref": 31, "subject": "Wire the form", "project": 1}
+        )
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    task = await client.get_task_by_ref(1, 31)
+    params = route.calls.last.request.url.params
+    assert params["project"] == "1"
+    assert params["ref"] == "31"
+    assert task.id == 9
+
+
+@respx.mock
+async def test_update_task_by_ref_resolves_the_ref_then_patches_by_id():
+    # A #ref is only unique within its project, so the write itself must go to
+    # the id endpoint — never to /tasks/by_ref.
+    by_ref = respx.get(f"{TAIGA_URL}/tasks/by_ref").mock(
+        return_value=httpx.Response(
+            200, json={"id": 9, "ref": 31, "subject": "T", "project": 1, "version": 4}
+        )
+    )
+    respx.get(f"{TAIGA_URL}/tasks/9").mock(
+        return_value=httpx.Response(
+            200, json={"id": 9, "ref": 31, "subject": "T", "project": 1, "version": 4}
+        )
+    )
+    route = respx.patch(f"{TAIGA_URL}/tasks/9").mock(
+        return_value=httpx.Response(
+            200, json={"id": 9, "ref": 31, "subject": "Renamed", "project": 1}
+        )
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    task = await client.update_task_by_ref(1, 31, subject="Renamed")
+    assert by_ref.called
+    assert json.loads(route.calls.last.request.content) == {
+        "version": 4,
+        "subject": "Renamed",
+    }
+    assert task.subject == "Renamed"
+
+
+@respx.mock
+async def test_update_task_by_ref_reports_a_missing_id_readably():
+    respx.get(f"{TAIGA_URL}/tasks/by_ref").mock(
+        return_value=httpx.Response(200, json={"ref": 31, "subject": "T"})
+    )
+    client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
+    with pytest.raises(RuntimeError, match="missing 'id'"):
+        await client.update_task_by_ref(1, 31, subject="Renamed")

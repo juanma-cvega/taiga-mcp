@@ -14,6 +14,12 @@
 # history), so the release commit is pushed as a dedicated GitHub App that sits
 # on that ruleset's bypass list. Its credentials are confined to the `release`
 # environment; see the note on the job below.
+#
+# Every push to main first runs the live smoke test (smoke.yml, called as a
+# reusable workflow), and the release job waits on it. A push carrying no
+# releasable commit still pays for that run: it verifies the API against the
+# code that just landed, which is the same thing the next release would have
+# needed anyway.
 name: Release
 
 on:
@@ -26,7 +32,26 @@ permissions:
   contents: read
 
 jobs:
+  # Gate the release on the live API before anything is tagged. The mocked
+  # suite the release job runs below can only prove we send what a fake Taiga
+  # would have accepted; this proves the endpoints still exist and behave. A
+  # release that fails on first contact with the real API is worse than one
+  # that never happens, so this runs first and the release waits on it.
+  #
+  # The cost, accepted deliberately: a Taiga outage or an expired smoke
+  # credential blocks a release even when the code is fine. Re-run the workflow
+  # once the API is back -- nothing has been tagged, so a blocked release is
+  # simply a release that has not happened yet.
+  #
+  # `secrets: inherit` passes repository-level secrets; the Taiga credentials
+  # are not among them. They are environment secrets, resolved by the
+  # `environment: smoke` on the called workflow's own job.
+  smoke:
+    uses: ./.github/workflows/smoke.yml
+    secrets: inherit
+
   release:
+    needs: smoke
     runs-on: ubuntu-latest
 
     # Serialise releases: two pushes in flight would otherwise race to compute
