@@ -56,11 +56,26 @@ class UserStory(BaseModel):
 
 
 class Task(BaseModel):
+    """A Taiga task: a unit of work under a user story.
+
+    `user_story` is nullable — Taiga allows a task to sit in a sprint with no
+    story above it — and `version` is Taiga's optimistic-concurrency counter,
+    which every write has to echo back.
+    """
+
     id: int
     ref: int
     subject: str
     project: int
     user_story: int | None = None
+    milestone: int | None = None
+    milestone_name: str | None = None
+    description: str | None = None
+    tags: list | None = None
+    is_blocked: bool | None = None
+    blocked_note: str | None = None
+    assigned_to: int | None = None
+    version: int | None = None
     status_extra_info: dict | None = None
     project_extra_info: dict | None = None
 

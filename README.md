@@ -83,16 +83,26 @@ claude mcp add taiga -- uv run --directory /path/to/taiga-mcp taiga-mcp
 | `get_story` | `story_id` | Get a single story by id with its full field set. |
 | `get_epic_by_ref` | `project_id`, `ref` | Get a single epic by its per-project `#ref` (the number shown in the Taiga UI). |
 | `get_story_by_ref` | `project_id`, `ref` | Get a single story by its per-project `#ref`. |
+| `get_task` | `task_id` | Get a single task by id with its full field set. |
+| `get_task_by_ref` | `project_id`, `ref` | Get a single task by its per-project `#ref`. |
 | `get_issue` | `issue_id` | Get a single issue by id with its full field set. |
 | `get_issue_by_ref` | `project_id`, `ref` | Get a single issue by its per-project `#ref`. |
 | `create_issue` | `project_id`, `subject`, + optional `description`, `status`, `issue_type`, `priority`, `severity`, `sprint_id`, `assigned_to`, `tags`, `is_blocked`, `blocked_note` | Create an issue. `status`, `issue_type`, `priority` and `severity` are names, not ids. |
+| `create_task` | `project_id`, `subject`, + optional `description`, `status`, `user_story_id`, `sprint_id`, `assigned_to`, `tags`, `is_blocked`, `blocked_note` | Create a task, optionally under a story. `status` is a **task** status name. |
+| `update_task` | `task_id`, + any field to change | Update a task. `None` leaves a field unchanged; `''` clears it. `user_story_id` moves it under a different story. |
+| `update_task_by_ref` | `project_id`, `ref`, + any field to change | Update a task by its per-project `#ref`. |
 | `update_epic` | `epic_id`, + any field to change | Update an epic. `None` leaves a field unchanged; `''` clears it. |
 | `update_story` | `story_id`, + any field to change | Update a story. `None` leaves a field unchanged; `''` clears it. `epic_id` attaches it to an epic (added alongside any epic it is already in). |
 | `update_epic_by_ref` | `project_id`, `ref`, + any field to change | Update an epic by its per-project `#ref`. |
 | `update_story_by_ref` | `project_id`, `ref`, + any field to change | Update a story by its per-project `#ref`. Accepts `epic_id` like `update_story`. |
 | `update_issue` | `issue_id`, + any field to change | Update an issue. `None` leaves a field unchanged; `''` clears it. |
 | `update_issue_by_ref` | `project_id`, `ref`, + any field to change | Update an issue by its per-project `#ref`. |
-| `delete_issue` | `issue_id` | Delete an issue permanently. Unlike epics and stories, which Taiga cannot delete, issues are removed outright. |
+| `delete_issue` | `issue_id` | Delete an issue permanently. Nothing hangs off an issue, so nothing else is affected. |
+| `delete_story` | `story_id` | Delete a story permanently. Its tasks are deleted **with it**; its epics survive, minus the link. |
+| `delete_epic` | `epic_id` | Delete an epic permanently. Its stories are **not** deleted — only the links to them go. |
+| `delete_task` | `task_id` | Delete a task permanently. Its user story is untouched. |
+| `promote_issue_to_story` | `issue_id` | Promote an issue to a user story. The issue is kept, and neither deleted nor closed. |
+| `promote_task_to_story` | `task_id` | Promote a task to a user story. **Taiga deletes the task** once the story exists. |
 | `add_comment` | `item_type` (`story`/`epic`/`task`/`issue`), `item_id`, `comment` | Add a comment to an existing item. No other field is touched. |
 | `add_comment_by_ref` | `item_type`, `project_id`, `ref`, `comment` | Add a comment to an item addressed by its per-project `#ref`. |
 | `list_comments` | `item_type` (`story`/`epic`/`task`/`issue`), `item_id` | Read an item's comments, oldest first. Comments deleted in the UI are omitted. |
@@ -105,6 +115,20 @@ is how to discover them. They read back as numeric ids: Taiga returns no name
 alongside them the way it does for `status`, so naming them would cost an extra
 request per catalogue on every read. `issue_type` is Taiga's `type` field,
 renamed to avoid shadowing the builtin.
+
+Statuses are per-project *and* per-type: a project defines its story statuses,
+its task statuses, its epic statuses and its issue statuses separately, and the
+same name need not exist in all four. `create_task` and `update_task` resolve
+against the task set, so a story status like `Ready for test` is rejected there
+unless the project's task workflow happens to define one too.
+
+Promotion runs one way only. Taiga can promote an issue or a task *up* to a
+user story — carrying over the subject, description, tags, sprint, assignee,
+comments, attachments and watchers — but it has no operation for turning a
+story back into an issue or a task, so this server exposes none. The two
+directions also differ in what survives: promoting an issue leaves the issue
+in place (open, and linked to the story it generated), while promoting a task
+deletes it, since the work has moved up a level rather than been copied.
 
 The list tools show both the `#ref` (the identifier a human sees in the Taiga
 UI) and the numeric `id`. The `id` tools (`get_epic`, `update_story`, …) take

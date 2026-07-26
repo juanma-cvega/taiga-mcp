@@ -8,7 +8,7 @@ from mcp.server.fastmcp import FastMCP
 
 from taiga_mcp.auth import authenticate
 from taiga_mcp.client import TaigaClient
-from taiga_mcp.models import Comment, Epic, Issue, Sprint, Task
+from taiga_mcp.models import Comment, Epic, Issue, Sprint, Task, UserStory
 
 load_dotenv()
 
@@ -107,6 +107,17 @@ def _format_comments(comments: list[Comment]) -> str:
         return f"{header}:\n{comment.comment}"
 
     return "\n\n".join(block(c) for c in comments)
+
+
+def _format_promotion(source: str, item_id: int, stories: list[UserStory]) -> str:
+    """Report the stories a promotion produced. Taiga returns a list, so this
+    reads them all rather than assuming the single story it creates today."""
+    if not stories:
+        return f"Taiga created no story promoting {source} {item_id}."
+    return "\n".join(
+        _with_link(f"Promoted {source} to story #{s.ref} {s.subject} (id: {s.id})", s)
+        for s in stories
+    )
 
 
 def _format_sprint(sprint: Sprint) -> str:
@@ -274,6 +285,28 @@ async def get_issue(issue_id: int) -> str:
 
 
 @mcp.tool()
+async def get_task(task_id: int) -> str:
+    """Get a single Taiga task by its numeric id.
+
+    Args:
+        task_id: Numeric Taiga task ID.
+    """
+    return _format_detail(await _get_client().get_task(task_id))
+
+
+@mcp.tool()
+async def get_task_by_ref(project_id: int, ref: int) -> str:
+    """Get a single Taiga task by its per-project #ref (the number shown in
+    the Taiga UI), not its internal id.
+
+    Args:
+        project_id: Numeric Taiga project ID.
+        ref: The task's #ref within that project.
+    """
+    return _format_detail(await _get_client().get_task_by_ref(project_id, ref))
+
+
+@mcp.tool()
 async def get_issue_by_ref(project_id: int, ref: int) -> str:
     """Get a single Taiga issue by its per-project #ref (the number shown in
     the Taiga UI), not its internal id.
@@ -390,6 +423,153 @@ async def create_story(
         blocked_note=blocked_note,
     )
     return _with_link(f"Created #{story.ref} {story.subject} (id: {story.id})", story)
+
+
+@mcp.tool()
+async def create_task(
+    project_id: int,
+    subject: str,
+    description: str | None = None,
+    status: str | None = None,
+    user_story_id: int | None = None,
+    sprint_id: int | None = None,
+    assigned_to: int | None = None,
+    tags: list | None = None,
+    is_blocked: bool | None = None,
+    blocked_note: str | None = None,
+) -> str:
+    """
+    Create a Taiga task.
+
+    A task normally belongs to a user story, but user_story_id is optional —
+    Taiga allows a loose task that only belongs to a sprint. Note that tasks
+    are deleted along with their story, so a task under a story is not
+    independent of it.
+
+    Args:
+        project_id: Numeric Taiga project ID.
+        subject: Task title (required).
+        description: Optional body text.
+        status: Optional status NAME from the project's TASK statuses, which
+            are a separate set from its story statuses (resolved to an id).
+        user_story_id: Optional user story id to put the task under.
+        sprint_id: Optional sprint (milestone) id.
+        assigned_to: Optional numeric user id.
+        tags: Optional list of tags.
+        is_blocked: Optional blocked flag.
+        blocked_note: Optional reason when blocked.
+    """
+    task = await _get_client().create_task(
+        project_id=project_id,
+        subject=subject,
+        description=description,
+        status=status,
+        user_story_id=user_story_id,
+        sprint_id=sprint_id,
+        assigned_to=assigned_to,
+        tags=tags,
+        is_blocked=is_blocked,
+        blocked_note=blocked_note,
+    )
+    return _with_link(f"Created task #{task.ref} {task.subject} (id: {task.id})", task)
+
+
+@mcp.tool()
+async def update_task(
+    task_id: int,
+    subject: str | None = None,
+    description: str | None = None,
+    status: str | None = None,
+    user_story_id: int | None = None,
+    sprint_id: int | None = None,
+    assigned_to: int | None = None,
+    tags: list | None = None,
+    is_blocked: bool | None = None,
+    blocked_note: str | None = None,
+) -> str:
+    """
+    Update a Taiga task. Only the fields you pass are changed.
+
+    Args:
+        task_id: Numeric Taiga task ID.
+        subject: Optional new title.
+        description: Optional new body text.
+        status: Optional status NAME from the project's TASK statuses, which
+            are a separate set from its story statuses (resolved to an id).
+        user_story_id: Optional user story id — moves the task under a
+            different story.
+        sprint_id: Optional sprint (milestone) id.
+        assigned_to: Optional numeric user id.
+        tags: Optional list of tags.
+        is_blocked: Optional blocked flag.
+        blocked_note: Optional reason when blocked.
+
+    None leaves a field unchanged; '' clears it.
+    """
+    task = await _get_client().update_task(
+        task_id,
+        subject=subject,
+        description=description,
+        status=status,
+        user_story_id=user_story_id,
+        sprint_id=sprint_id,
+        assigned_to=assigned_to,
+        tags=tags,
+        is_blocked=is_blocked,
+        blocked_note=blocked_note,
+    )
+    return _with_link(f"Updated task #{task.ref} {task.subject} [{task.status}]", task)
+
+
+@mcp.tool()
+async def update_task_by_ref(
+    project_id: int,
+    ref: int,
+    subject: str | None = None,
+    description: str | None = None,
+    status: str | None = None,
+    user_story_id: int | None = None,
+    sprint_id: int | None = None,
+    assigned_to: int | None = None,
+    tags: list | None = None,
+    is_blocked: bool | None = None,
+    blocked_note: str | None = None,
+) -> str:
+    """
+    Update a Taiga task by its per-project #ref (the number shown in the Taiga
+    UI), not its internal id. Only the fields you pass are changed.
+
+    Args:
+        project_id: Numeric Taiga project ID.
+        ref: The task's #ref within that project.
+        subject: Optional new title.
+        description: Optional new body text.
+        status: Optional status NAME from the project's TASK statuses, which
+            are a separate set from its story statuses (resolved to an id).
+        user_story_id: Optional user story id — moves the task under a
+            different story.
+        sprint_id: Optional sprint (milestone) id.
+        assigned_to: Optional numeric user id.
+        tags: Optional list of tags.
+        is_blocked: Optional blocked flag.
+        blocked_note: Optional reason when blocked.
+
+    None leaves a field unchanged; '' clears it.
+    """
+    task = await _get_client().update_task_by_ref(
+        project_id,
+        ref,
+        subject=subject,
+        description=description,
+        status=status,
+        user_story_id=user_story_id,
+        sprint_id=sprint_id,
+        assigned_to=assigned_to,
+        tags=tags,
+        is_blocked=is_blocked,
+        blocked_note=blocked_note,
+    )
+    return _with_link(f"Updated task #{task.ref} {task.subject} [{task.status}]", task)
 
 
 @mcp.tool()
@@ -555,9 +735,9 @@ async def delete_issue(issue_id: int) -> str:
     """
     Delete a Taiga issue permanently. This cannot be undone.
 
-    Unlike epics and user stories, which Taiga has no delete operation for,
-    issues can be removed outright — there is nothing to detach and nothing
-    left behind.
+    Nothing hangs off an issue, so nothing else is affected — but a story
+    promoted from it stays, having become independent the moment it was
+    created.
 
     Args:
         issue_id: Numeric Taiga issue ID.
@@ -565,6 +745,101 @@ async def delete_issue(issue_id: int) -> str:
     issue = await _get_client().get_issue(issue_id)
     await _get_client().delete_issue(issue_id)
     return f"Deleted #{issue.ref} {issue.subject} (id: {issue.id})"
+
+
+@mcp.tool()
+async def delete_story(story_id: int) -> str:
+    """
+    Delete a Taiga user story permanently. This cannot be undone.
+
+    The story's tasks are deleted with it — Taiga cascades the delete rather
+    than detaching them, so a story with tasks takes them all down. Its epics
+    survive; only the links to them go. To take a story out of a sprint
+    without deleting it, use move_story_to_backlog instead.
+
+    Args:
+        story_id: Numeric Taiga user story ID.
+    """
+    story = await _get_client().get_story(story_id)
+    await _get_client().delete_story(story_id)
+    return (
+        f"Deleted #{story.ref} {story.subject} (id: {story.id}), "
+        f"along with any tasks it held."
+    )
+
+
+@mcp.tool()
+async def delete_epic(epic_id: int) -> str:
+    """
+    Delete a Taiga epic permanently. This cannot be undone.
+
+    The epic's user stories are NOT deleted — Taiga only drops the links, and
+    the stories stay in the project (in the backlog or their sprint, as
+    before).
+
+    Args:
+        epic_id: Numeric Taiga epic ID.
+    """
+    epic = await _get_client().get_epic(epic_id)
+    await _get_client().delete_epic(epic_id)
+    return (
+        f"Deleted epic #{epic.ref} {epic.subject} (id: {epic.id}). "
+        f"Any stories it held remain in the project."
+    )
+
+
+@mcp.tool()
+async def delete_task(task_id: int) -> str:
+    """
+    Delete a Taiga task permanently. This cannot be undone.
+
+    The user story the task belonged to is not touched.
+
+    Args:
+        task_id: Numeric Taiga task ID.
+    """
+    task = await _get_client().get_task(task_id)
+    await _get_client().delete_task(task_id)
+    return f"Deleted task #{task.ref} {task.subject} (id: {task.id})"
+
+
+@mcp.tool()
+async def promote_issue_to_story(issue_id: int) -> str:
+    """
+    Promote a Taiga issue to a user story — the API behind the Taiga UI's
+    "Promote to User Story", not a hand-rolled copy.
+
+    The new story carries over the issue's subject, description, tags, sprint,
+    assignee, comments, attachments and watchers, and records that the issue
+    generated it. The issue itself is kept: it is neither deleted nor closed,
+    so close it yourself if the work has moved to the story.
+
+    There is no promotion the other way — Taiga cannot turn a story into an
+    issue.
+
+    Args:
+        issue_id: Numeric Taiga issue ID.
+    """
+    stories = await _get_client().promote_to_story("issue", issue_id)
+    return _format_promotion("issue", issue_id, stories)
+
+
+@mcp.tool()
+async def promote_task_to_story(task_id: int) -> str:
+    """
+    Promote a Taiga task to a user story.
+
+    DESTRUCTIVE: unlike promoting an issue, Taiga DELETES the task once the
+    story exists — the task is moved up a level, not copied. The story takes
+    over its subject, description, tags, sprint, assignee, due date, blocked
+    flag, comments, attachments, watchers and votes, but it starts out
+    unattached to the story the task belonged to.
+
+    Args:
+        task_id: Numeric Taiga task ID.
+    """
+    stories = await _get_client().promote_to_story("task", task_id)
+    return _format_promotion("task", task_id, stories)
 
 
 @mcp.tool()
