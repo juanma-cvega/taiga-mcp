@@ -27,7 +27,7 @@ is deleted at the end of the run.
 
 import asyncio
 import os
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from taiga_mcp import server  # importing loads .env via server's load_dotenv()
 from taiga_mcp.auth import authenticate
@@ -77,7 +77,7 @@ async def write_lifecycle(pid: int) -> None:
     the MCP tools (server.*) for get/update so both layers are exercised.
     """
     client = server._get_client()
-    stamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    stamp = datetime.now(UTC).isoformat(timespec="seconds")
 
     print(f"\n== create_epic (project {pid}) ==")
     epic = await client.create_epic(
@@ -208,7 +208,10 @@ async def sprint_lifecycle(pid: int, story_id: int, stamp: str) -> None:
     detaching (not deleting) the sprint's stories.
     """
     client = server._get_client()
-    today = date.today()
+    # Not date.today(): that reads the runner's local timezone, so a smoke test
+    # run late in the evening west of UTC would date the sprint a day behind
+    # the stamps above, which are UTC.
+    today = datetime.now(UTC).date()
 
     print(f"\n== create_sprint (project {pid}) ==")
     result = await server.create_sprint(

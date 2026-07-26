@@ -1,10 +1,12 @@
+from unittest.mock import AsyncMock
+
+import httpx
 import pytest
 import respx
-import httpx
-from unittest.mock import AsyncMock
+
 from taiga_mcp import server
 from taiga_mcp.client import TaigaClient
-from taiga_mcp.models import Comment, Project, Sprint, UserStory, Task, Epic
+from taiga_mcp.models import Comment, Epic, Project, Sprint, Task, UserStory
 
 TAIGA_URL = "https://api.taiga.io/api/v1"
 

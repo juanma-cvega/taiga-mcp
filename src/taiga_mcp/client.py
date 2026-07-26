@@ -1,9 +1,11 @@
 import asyncio
-from typing import Awaitable, Callable, NamedTuple
+from collections.abc import Awaitable, Callable
+from typing import NamedTuple
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx
-from taiga_mcp.models import Comment, Project, Sprint, UserStory, Task, Epic
+
+from taiga_mcp.models import Comment, Epic, Project, Sprint, Task, UserStory
 
 
 def _build_payload(fields: dict) -> dict:

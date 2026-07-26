@@ -5,6 +5,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
+
 from taiga_mcp.auth import authenticate
 from taiga_mcp.client import TaigaClient
 from taiga_mcp.models import Comment, Epic, Sprint, Task
