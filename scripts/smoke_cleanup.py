@@ -4,10 +4,10 @@ Run with:  uv run python scripts/smoke_cleanup.py
 
 A successful smoke run tears itself down, so this is a no-op after one. It
 exists for the runs that do not finish: an assertion failure, a Taiga outage
-mid-run or a cancelled CI job abandons whatever had been created up to that
-point, and unattended in CI that debris accumulates silently until someone
-looks at the project. smoke.yml runs this with `if: always()` for exactly that
-reason.
+mid-run or an interrupted run abandons whatever had been created up to that
+point, and that debris stays in the project until someone clears it -- where it
+will eventually foul a later run's assertions. Run this after any smoke run
+that did not reach the end.
 
 It uses the same TAIGA_SMOKE_* credentials as the smoke test and only ever
 touches items whose subject (or name, for sprints) starts with '[smoke ' --

@@ -10,9 +10,10 @@
 # bumps this exists to vet: a bumped library breaks mypy long before it breaks
 # a test. Pushes to main are already covered by the release workflow running
 # the identical gate, so this stays pull-request only -- which is what the name
-# says, rather than claiming to be the whole of CI. The live smoke test is
-# deliberately not here: it needs Taiga credentials, and a same-repo PR branch
-# can read repository secrets. It gates the release instead; see release.yml.
+# says, rather than claiming to be the whole of CI. The live smoke test is not
+# here and not anywhere else in CI: it needs Taiga credentials, which a
+# same-repo PR branch could read, and Taiga Cloud's WAF blocks GitHub runners
+# outright. It is a local tool; see scripts/smoke_test.py and release.yml.
 name: Pull Request
 
 on:
