@@ -1,0 +1,70 @@
+# Runs the live smoke test against a real Taiga account after a merge to main.
+#
+# This is deliberately NOT part of ci.yml. That workflow runs on every pull
+# request, Dependabot's included, and holds no secrets: a same-repo PR branch
+# *does* receive repository secrets, so a smoke step there would let anyone with
+# write access add a step that prints the Taiga credentials. (Fork PRs are not
+# the exposure -- GitHub withholds secrets from those already.) Keeping the live
+# run on post-merge pushes means the credentials are never present in a run
+# built from unreviewed workflow changes.
+#
+# The `environment:` below is the load-bearing half of that. Configure the
+# `smoke` environment with a deployment branch policy limited to `main`, and
+# these secrets become unreadable from any other ref even if a future workflow
+# asks for them by name.
+#
+# What this buys over the mocked test suite: the unit tests can only prove we
+# send whatever a fake Taiga would have accepted. Only this proves the endpoints
+# exist and behave -- the per-project status/type/priority/severity catalogues,
+# the undocumented promote_to_user_story and /tasks/by_ref routes, and what
+# Taiga takes down with each delete (tasks cascade from their story; an epic's
+# stories survive it).
+name: Smoke
+
+on:
+  push:
+    branches:
+      - main
+  # Re-runnable by hand after a Taiga-side change, without waiting for a merge.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Serialise runs and never cancel one in flight. Two runs against the same
+# project would interleave and trip over each other's assertions, and -- unlike
+# ci.yml, where cancelling costs nothing -- a half-finished run leaves the epics,
+# stories and tasks it created behind in the project for someone to clean up.
+concurrency:
+  group: smoke
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: Live Taiga lifecycle
+    runs-on: ubuntu-latest
+    # Scopes the secrets below to this environment. Restrict it to `main` in
+    # the repository settings; the workflow file cannot enforce that itself.
+    environment: smoke
+
+    steps:
+      - name: Setup | Check out main
+        uses: actions/checkout@v4
+
+      - name: Setup | Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Setup | Install dependencies
+        # Not `--locked`, for the same reason as ci.yml: uv.lock's recorded
+        # version trails pyproject.toml between releases by design.
+        run: uv sync
+
+      - name: Check | Full lifecycle against the smoke project
+        env:
+          TAIGA_SMOKE_URL: ${{ secrets.TAIGA_SMOKE_URL }}
+          TAIGA_SMOKE_USERNAME: ${{ secrets.TAIGA_SMOKE_USERNAME }}
+          TAIGA_SMOKE_PASSWORD: ${{ secrets.TAIGA_SMOKE_PASSWORD }}
+          # Set: without it the run is read-only and proves none of the write,
+          # promote or delete behaviour. Point it at a throwaway project.
+          TAIGA_SMOKE_PROJECT_SLUG: ${{ secrets.TAIGA_SMOKE_PROJECT_SLUG }}
+        run: uv run python scripts/smoke_test.py
