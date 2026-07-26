@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v1.5.0 (2026-07-26)
+
+### Chores
+
+- **deps-dev**: Bump the dev-tools group across 1 directory with 4 updates
+  ([#7](https://github.com/juanma-cvega/taiga-mcp/pull/7),
+  [`d0f326c`](https://github.com/juanma-cvega/taiga-mcp/commit/d0f326cc105ce941982c9960e954f114268640b1))
+
+### Features
+
+- Add tools to manage Taiga issues ([#13](https://github.com/juanma-cvega/taiga-mcp/pull/13),
+  [`2be8dcd`](https://github.com/juanma-cvega/taiga-mcp/commit/2be8dcd1ae2b94aee4efab0a6d92d781073a62fc))
+
+
 ## v1.4.2 (2026-07-26)
 
 ### Bug Fixes
