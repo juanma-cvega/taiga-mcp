@@ -2,6 +2,30 @@
 
 <!-- version list -->
 
+## v1.4.0 (2026-07-26)
+
+### Chores
+
+- Add CODEOWNERS assigning ownership of the repo
+  ([`6273e29`](https://github.com/juanma-cvega/taiga-mcp/commit/6273e29dddff09af5ae2d12176b9e90f79c8bf9b))
+
+### Continuous Integration
+
+- Push the release as a GitHub App so it clears the main ruleset
+  ([#3](https://github.com/juanma-cvega/taiga-mcp/pull/3),
+  [`c8760cf`](https://github.com/juanma-cvega/taiga-mcp/commit/c8760cfa9aaa1a879bac5b3ce63b848c373c5176))
+
+- Re-lock uv.lock inside the release so it stops lagging a version
+  ([#2](https://github.com/juanma-cvega/taiga-mcp/pull/2),
+  [`79779e4`](https://github.com/juanma-cvega/taiga-mcp/commit/79779e400a379838362c16f1708bf1bba63a7cb4))
+
+### Features
+
+- Let update_story attach a story to an epic
+  ([#2](https://github.com/juanma-cvega/taiga-mcp/pull/2),
+  [`79779e4`](https://github.com/juanma-cvega/taiga-mcp/commit/79779e400a379838362c16f1708bf1bba63a7cb4))
+
+
 ## v1.3.0 (2026-07-24)
 
 ### Features

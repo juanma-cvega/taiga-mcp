@@ -1,0 +1,81 @@
+# Dependency updates open as pull requests, which is the only way onto main:
+# the `main` ruleset requires a PR and a Code Owner review, and CODEOWNERS gives
+# every file to @juanma-cvega, so review routing needs no config here. There is
+# no auto-merge workflow in this repo -- every bump is merged by hand.
+version: 2
+updates:
+  # Python dependencies. The `uv` ecosystem reads pyproject.toml -- both
+  # [project] dependencies and the PEP 735 [dependency-groups] dev group -- and
+  # updates uv.lock in the same pull request, so the lockfile never drifts from
+  # the manifest.
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "python"
+    commit-message:
+      # `chore(deps)` is deliberate, not cosmetic: python-semantic-release
+      # parses every commit that lands on main, and chore: releases nothing. A
+      # dependency bump therefore rides along in the next feat:/fix: release
+      # instead of cutting a version of its own. Using fix: here would tag a
+      # patch release per merged bump. See [tool.semantic_release].
+      prefix: "chore(deps)"
+      include: "scope"
+    groups:
+      # Grouped so a quiet week is one PR, not six. Only minor and patch are
+      # grouped -- majors deliberately fall out into their own pull requests,
+      # where a breaking change gets read on its own rather than buried in a
+      # batch.
+      runtime:
+        patterns:
+          - "httpx"
+          - "mcp"
+          - "pydantic"
+          - "python-dotenv"
+        update-types:
+          - "minor"
+          - "patch"
+      dev-tools:
+        patterns:
+          - "mypy"
+          - "pre-commit"
+          - "pytest*"
+          - "respx"
+          - "ruff"
+        update-types:
+          - "minor"
+          - "patch"
+      # Catch-all for anything added later that nobody remembered to slot into
+      # the groups above; without it a new dependency silently gets its own PR
+      # every week.
+      other-python:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # GitHub Actions used by the workflows. This also keeps the SHA-pinned
+  # create-github-app-token in release.yml current -- Dependabot rewrites the
+  # pin and its version comment together.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "chore(ci)"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
