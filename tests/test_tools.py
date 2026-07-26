@@ -30,12 +30,15 @@ def ui_base(monkeypatch):
 async def test_list_projects_formats_output(mock_client):
     mock_client.list_projects.return_value = [
         Project(
-            id=1, name="Booking Engine", slug="booking-engine", description="My project"
+            id=1,
+            name="Example Project",
+            slug="example-project",
+            description="My project",
         )
     ]
     result = await server.list_projects()
-    assert "Booking Engine" in result
-    assert "booking-engine" in result
+    assert "Example Project" in result
+    assert "example-project" in result
 
 
 async def test_list_projects_empty(mock_client):

@@ -283,13 +283,13 @@ TOKEN = "test-token"
 async def test_list_projects():
     respx.get(f"{TAIGA_URL}/projects").mock(
         return_value=httpx.Response(200, json=[
-            {"id": 1, "name": "Booking Engine", "slug": "booking-engine", "description": "My project"}
+            {"id": 1, "name": "Example Project", "slug": "example-project", "description": "My project"}
         ])
     )
     client = TaigaClient(TAIGA_URL, TOKEN)
     projects = await client.list_projects()
     assert len(projects) == 1
-    assert projects[0].name == "Booking Engine"
+    assert projects[0].name == "Example Project"
 
 
 @respx.mock
@@ -450,11 +450,11 @@ def mock_client(monkeypatch):
 
 async def test_list_projects_formats_output(mock_client):
     mock_client.list_projects.return_value = [
-        Project(id=1, name="Booking Engine", slug="booking-engine", description="My project")
+        Project(id=1, name="Example Project", slug="example-project", description="My project")
     ]
     result = await server.list_projects()
-    assert "Booking Engine" in result
-    assert "booking-engine" in result
+    assert "Example Project" in result
+    assert "example-project" in result
 
 
 async def test_list_projects_empty(mock_client):

@@ -17,8 +17,8 @@ async def test_list_projects():
             json=[
                 {
                     "id": 1,
-                    "name": "Booking Engine",
-                    "slug": "booking-engine",
+                    "name": "Example Project",
+                    "slug": "example-project",
                     "description": "My project",
                 }
             ],
@@ -27,7 +27,7 @@ async def test_list_projects():
     client = TaigaClient(TAIGA_URL, TOKEN, user_id=42)
     projects = await client.list_projects()
     assert len(projects) == 1
-    assert projects[0].name == "Booking Engine"
+    assert projects[0].name == "Example Project"
 
 
 @respx.mock
@@ -219,7 +219,7 @@ async def test_expired_token_is_refreshed_and_request_retried():
             httpx.Response(401, json={"_error_message": "Token expired"}),
             httpx.Response(
                 200,
-                json=[{"id": 1, "name": "Booking Engine", "slug": "booking-engine"}],
+                json=[{"id": 1, "name": "Example Project", "slug": "example-project"}],
             ),
         ]
     )
@@ -231,7 +231,7 @@ async def test_expired_token_is_refreshed_and_request_retried():
         TAIGA_URL, "stale-token", user_id=42, refresh_token=refresh_token
     )
     projects = await client.list_projects()
-    assert projects[0].name == "Booking Engine"
+    assert projects[0].name == "Example Project"
     assert client._client.headers["Authorization"] == "Bearer new-token"
 
 
