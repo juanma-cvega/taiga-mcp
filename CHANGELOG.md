@@ -2,6 +2,37 @@
 
 <!-- version list -->
 
+## v1.6.0 (2026-07-26)
+
+### Continuous Integration
+
+- Clean up after a smoke run that does not finish
+  ([#14](https://github.com/juanma-cvega/taiga-mcp/pull/14),
+  [`6379607`](https://github.com/juanma-cvega/taiga-mcp/commit/6379607365ed879f4643d7843e8d53d469ec6e58))
+
+- Drop the live smoke gate, Taiga blocks GitHub runners
+  ([#15](https://github.com/juanma-cvega/taiga-mcp/pull/15),
+  [`3f8d544`](https://github.com/juanma-cvega/taiga-mcp/commit/3f8d54474dd62f088433121acd04a38c6056fc68))
+
+- Gate the release on the live smoke test, and rename ci.yml
+  ([#14](https://github.com/juanma-cvega/taiga-mcp/pull/14),
+  [`6379607`](https://github.com/juanma-cvega/taiga-mcp/commit/6379607365ed879f4643d7843e8d53d469ec6e58))
+
+- Run the live smoke test on merges to main
+  ([#14](https://github.com/juanma-cvega/taiga-mcp/pull/14),
+  [`6379607`](https://github.com/juanma-cvega/taiga-mcp/commit/6379607365ed879f4643d7843e8d53d469ec6e58))
+
+### Features
+
+- Add task CRUD, promotion and the missing delete tools
+  ([#14](https://github.com/juanma-cvega/taiga-mcp/pull/14),
+  [`6379607`](https://github.com/juanma-cvega/taiga-mcp/commit/6379607365ed879f4643d7843e8d53d469ec6e58))
+
+- Complete the tool surface for issues, tasks and promotion, and gate releases on a live smoke run
+  ([#14](https://github.com/juanma-cvega/taiga-mcp/pull/14),
+  [`6379607`](https://github.com/juanma-cvega/taiga-mcp/commit/6379607365ed879f4643d7843e8d53d469ec6e58))
+
+
 ## v1.5.0 (2026-07-26)
 
 ### Chores
