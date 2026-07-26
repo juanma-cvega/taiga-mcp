@@ -48,11 +48,27 @@ version_toml = ["pyproject.toml:project.version"]
 # PAT (e.g. to satisfy branch protection).
 commit_message = "chore: release {version} [skip ci]"
 
-# No build_command / assets on purpose. GitHub now creates releases as
-# immutable (their assets are sealed at creation), but PSR creates the release
-# and then uploads assets in a second step -- which an immutable release
-# rejects, failing the whole run *after* it has already tagged and released.
-# We therefore attach nothing: the tag and generated notes are the release.
-# The trade-off is that uv.lock's own recorded version lags a bump behind
-# pyproject.toml until the next `uv lock`/`uv sync` re-syncs it (which any dev
-# command does automatically); nothing here pins the lock, so CI is unaffected.
+# uv.lock records the project's own version too, so it has to be re-locked
+# after the bump and carried in the release commit -- otherwise the lockfile
+# trails pyproject.toml and the next `uv sync` rewrites it under someone's
+# feet, in whichever unrelated PR happens to touch it next.
+#
+# `assets` is the obvious way to add a file to the release commit, but it is
+# dual-purpose: PSR also uploads every asset to the GitHub Release right after
+# creating it, and GitHub now creates releases as immutable, with their assets
+# sealed at creation. That upload is rejected, and it happens *after* the
+# commit, tag and release, so the run goes red with the release already live.
+#
+# So we re-lock in build_command instead and stage the result ourselves. PSR
+# runs build_command before it stages and commits, and its commit is a plain
+# `git commit` over the index, so anything staged here rides along in the
+# release commit. A failure aborts the release before anything is committed.
+#
+# The `pip install uv` is not redundant with the workflow's setup-uv step: the
+# PSR GitHub Action is a Docker action, so build_command runs inside a
+# python:3-slim container that cannot see anything installed on the runner
+# host. Without this the build dies with "uv: not found" (exit 127). The
+# container has git and a system-wide `safe.directory = *`, so `git add` works.
+# Nothing is built: no sdist/wheel is attached, the tag and notes are the
+# release.
+build_command = "pip install uv && uv lock && git add uv.lock"
