@@ -26,8 +26,14 @@ promote one to a story, then delete the task, story and epics.
 A full run leaves nothing behind — everything it creates it deletes, which is
 also how it verifies what Taiga takes down with each delete (tasks cascade
 from their story; an epic's stories survive it). A run that does NOT finish
-does leave debris, since the teardown is inline: scripts/smoke_cleanup.py
-removes it, and CI runs that after every smoke run whatever the outcome.
+does leave debris, since the teardown is inline: run scripts/smoke_cleanup.py
+to clear it.
+
+This is a local tool, deliberately. Running it from GitHub Actions was tried
+and reverted: Taiga Cloud fronts api.taiga.io with a WAF that greylists
+GitHub-hosted runner IPs and answers the auth call with 403 and a CAPTCHA page,
+so no GitHub runner can get past authentication. Run it from a machine Taiga
+will talk to, before a release you care about.
 """
 
 import asyncio
